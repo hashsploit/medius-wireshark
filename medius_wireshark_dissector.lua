@@ -2,17 +2,192 @@
 -- Written by hashsploit <hashsploit@protonmail.com>
 -- Ref: https://wiki.hashsploit.net/PlayStation_2#Medius
 
-local my_info = {
-	version = "1.0.0",
-	author = "hashsploit",
-	repository = "https://github.com/hashsploit/medius-wireshark"
+---------------------------------------------
+-- Constants & Enums
+---------------------------------------------
+
+local const = {}
+const.MESSAGEID_MAXLEN = 21
+const.POLICY_MAXLEN = 256
+const.NET_MAX_IP_LENGTH = 16 -- This macro defines the length of an IP address string including the null terminator.
+const.NET_MAX_ADDRESS_STR_LENGTH = 18 -- This macro defines the maximum length of an IP address (16 bytes) or MAC Address (18 bytes) (including the null terminator).
+const.NET_ADDRESS_LIST_COUNT = 2 -- This macro determines the number of addresses in an address list.
+const.NET_SESSION_KEY_LEN = 17 -- This macro determines the length of a session key as used in ConnectionInfo (includes NULL terminator).
+const.NET_ACCESS_KEY_LEN = 17 -- This macro determines the length of an access key as used in ConnectionInfo (includes NULL terminator).
+
+
+local MediusConnectionType = {
+	[0] = {name="MODEM", desc="The connection is on a modem."},
+	[1] = {name="ETHERNET", desc="The connection is on Ethernet."},
+	[2] = {name="WIRELESS", desc="The connection is wireless."}
 }
 
-set_plugin_info(my_info)
+local MediusCallbackStatus = {
+	[0] = {name="MediusSuccess", desc="Success."},
+	[1] = {name="MediusNoResult", desc="No results. This is a valid state."},
+	[2] = {name="MediusRequestAccepted", desc="The request has been accepted."},
+	[3] = {name="MediusWorldCreatedSizeReduced", desc="The world has been created with reduced size."},
+	[4] = {name="MediusPass", desc="The criteria has been met."},
+	[-935] = {name="MediusNotAMember", desc="The user is not a member of an list."},
+	[-936] = {name="MediusSubscriptionInvalid", desc="The subscription is invalid."},
+	[-937] = {name="MediusSubscriptionAborted", desc="The subscription has been aborted."},
+	[-938] = {name="MediusTokenDoesNotExist", desc="The token being referenced does not exist."},
+	[-939] = {name="MediusTokenAlreadyTaken", desc="The token is already in use."},
+	[-940] = {name="MediusSessionFail", desc="The session has failed."},
+	[-941] = {name="MediusTransactionCanceled", desc="The transaction has been cancelled."},
+	[-942] = {name="MediusGatewayError", desc="There is an internal gateway error."}
+	-- TODO: add more
+}
 
--- RTime Packet Id's
+local ApplicationId = {
+	[10411] = {
+		name="Syphon Filter: The Omega Strain",
+		desc="NTSC-U, May 4 2004, Medius 1.08",
+		date="May 4, 2004",
+		medius_version="1.08",
+		region="NTSC-U"
+	},
+	[10683] = {
+		name="Ratchet and Clank 3",
+		desc="PAL, November 3 2004, Medius 1.08",
+		date="November 3, 2004",
+		medius_version="1.08",
+		region="PAL"
+	},
+	[10684] = {
+		name="Ratchet and Clank: Up Your Arsenal",
+		desc="NTSC-U, November 3 2004, Medius 1.08",
+		date="November 3, 2004",
+		medius_version="1.08",
+		region="NTSC-U"
+	},
+	[10782] = {
+		name="Gran Turismo 4 (Beta)",
+		desc="NTSC-U, December 28 2004, Medius 1.10",
+		date="December 28, 2004",
+		medius_version="1.10",
+		region="NTSC-U"
+	},
+	[10994] = {
+		name="Jak X: Combat Racing",
+		desc="NTSC-U, October 18 2005, Medius 1.09",
+		date="October 18, 2005",
+		medius_version="1.09",
+		region="NTSC-U"
+	},
+	[11184] = {
+		name="Ratchet: Deadlocked",
+		desc="NTSC-U, October 25 2005, Medius 1.10",
+		date="October 25, 2005",
+		medius_version="1.10",
+		region="NTSC-U"
+	},
+	[11204] = {
+		name="Jak X: Combat Racing",
+		desc="PAL, November 4 2005, Medius 1.09",
+		date="November 4, 2005",
+		medius_version="1.09",
+		region="PAL"
+	}
+	-- TODO: add more
+}
+
+---------------------------------------------
+-- RTime ID's
+---------------------------------------------
+
 local rtids = {
-	[0x00] = {name="RT_MSG_CLIENT_CONNECT_TCP", desc="Normal client connect request, contains Medius version and Game ID."},
+	[0x00] = {
+		name = "RT_MSG_CLIENT_CONNECT_TCP",
+		desc = "Normal client connect request, contains Medius version and Game ID.",
+		struct_108 = { -- Structure for Medius 1.08 (0x6c) titles
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Unknown (Padding?)",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "world_id",
+				name = "World Id",
+				length = 2,
+				display = base.DEC_HEX
+			},
+			{
+				type = "uint8",
+				id = "app_id",
+				name = "App Id",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = ApplicationId
+			},
+			{
+				type = "bytes",
+				id = "rsa_key",
+				name = "RSA Key",
+				length = 64,
+				display = base.SPACE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = 17,
+				display = base.SPACE,
+				optional = true
+			},
+			{
+				type = "bytes",
+				id = "access_key",
+				name = "Access Key",
+				length = 17,
+				display = base.SPACE,
+				optional = true
+			}
+		},
+		struct_110 = { -- Structure for Medius 1.10 "2.10" (0x6e) titles
+			{
+				type = "uint8",
+				id = "world_id",
+				name = "World Id",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "uint8",
+				id = "app_id",
+				name = "App Id",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = ApplicationId
+			},
+			{
+				type = "bytes",
+				id = "rsa_key",
+				name = "RSA Key",
+				length = 64,
+				display = base.SPACE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = 17,
+				display = base.SPACE,
+				optional = true
+			},
+			{
+				type = "bytes",
+				id = "access_key",
+				name = "Access Key",
+				length = 17,
+				display = base.SPACE,
+				optional = true
+			}
+		}
+	},
 	[0x01] = {name="RT_MSG_CLIENT_DISCONNECT", desc="Normal client disconnect."},
 	[0x02] = {name="RT_MSG_CLIENT_APP_BROADCAST", desc=nil},
 	[0x03] = {name="RT_MSG_CLIENT_APP_SINGLE", desc=nil},
@@ -22,8 +197,14 @@ local rtids = {
 	[0x07] = {name="RT_MSG_SERVER_CONNECT_ACCEPT_TCP", desc="Login Client IP Address: The server sends the client their ip address. This might be used for NAT hole-punching down the line."},
 	[0x08] = {name="RT_MSG_SERVER_CONNECT_NOTIFY", desc=nil},
 	[0x09] = {name="RT_MSG_SERVER_DISCONNECT_NOTIFY", desc=nil},
-	[0x0a] = {name="RT_MSG_SERVER_APP", desc="Generic Medius data message to client from server."},
-	[0x0b] = {name="RT_MSG_CLIENT_APP_TOSERVER", desc="Generic Medius data message from client to server."},
+	[0x0a] = {
+		name="RT_MSG_SERVER_APP",
+		desc="Generic Medius data message to client from server."
+	},
+	[0x0b] = {
+		name="RT_MSG_CLIENT_APP_TOSERVER",
+		desc="Generic Medius data message from client to server."
+	},
 	[0x0c] = {name="RT_MSG_UDP_APP", desc=nil},
 	[0x0d] = {name="RT_MSG_CLIENT_SET_RECV_FLAG", desc=nil},
 	[0x0e] = {name="RT_MSG_CLIENT_SET_AGG_TIME", desc=nil},
@@ -69,7 +250,11 @@ local rtids = {
 	[0x36] = {name="RT_MSG_SERVER_MAX_MSGLEN", desc=nil}
 }
 
-local mediusids = {
+---------------------------------------------
+-- Medius Types
+---------------------------------------------
+
+local mediustypes = {
 	[0x1000] = {name="DMEClientConnects"},
 	[0x1300] = {name="DMERequestServers"},
 	[0x1400] = {name="DMEServerResponse"},
@@ -108,7 +293,33 @@ local mediusids = {
 	[0x0001] = {name="WorldReport0"},
 	[0x0101] = {name="PlayerReport"},
 	[0x0201] = {name="EndGameReport"},
-	[0x0301] = {name="SessionBegin"},
+	[0x0301] = {
+		name = "SessionBegin",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "medius_connection_type",
+				name = "Medius Connection Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusConnectionType
+			}
+		}
+	},
 	[0x0401] = {name="SessionBeginResponse"},
 	[0x0501] = {name="SessionEnd"},
 	[0x0601] = {name="SessionEndResponse"},
@@ -176,7 +387,47 @@ local mediusids = {
 	[0x4501] = {name="AddToBuddyListFwdConfirmationRequest0"},
 	[0x4601] = {name="AddToBuddyListFwdConfirmationResponse0"},
 	[0x4701] = {name="Policy"},
-	[0x4801] = {name="PolicyResponse"},
+	[0x4801] = {
+		name = "PolicyResponse",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "status",
+				name = "Callback Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCallbackStatus
+			},
+			{
+				type = "string",
+				id = "message",
+				name = "Policy Message",
+				length = const.POLICY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bool",
+				id = "endofmsg",
+				name = "End of Message",
+				length = 4,
+				display = base.BOOLEAN
+			}
+		}
+	},
 	[0x4901] = {name="UpdateUserState"},
 	[0x4A01] = {name="ErrorMessage"},
 	[0x4B01] = {name="GetAnnouncements"},
@@ -410,219 +661,533 @@ local mediusids = {
 	[0x3C04] = {name="AddPlayerToClan_ByClanOfficerResponse"}
 }
 
-local appids = {
-	[10411] = {name="Syphon Filter: The Omega Strain", date="May 4, 2004", medius_version="1.08", region="NTSC-U"},
-	[10683] = {name="Ratchet and Clank 3", date="November 3, 2004", medius_version="1.08", region="PAL"},
-	[10684] = {name="Ratchet and Clank: Up Your Arsenal", date="November 3, 2004", medius_version="1.08", region="NTSC-U"},
-	[10782] = {name="Gran Turismo 4 (Beta)", date="December 28, 2004", medius_version="1.10", region="NTSC-U"},
-	[10994] = {name="Jak X: Combat Racing", date="October 18, 2005", medius_version="1.09", region="NTSC-U"},
-	[11184] = {name="Ratchet: Deadlocked", date="October 25, 2005", medius_version="1.10", region="NTSC-U"},
-	[11204] = {name="Jak X: Combat Racing", date="November 4, 2005", medius_version="1.09", region="PAL"}
+---------------------------------------------
+-- Core
+---------------------------------------------
+
+local plugin_info = {
+	version = "1.2.1",
+	author = "hashsploit",
+	repository = "https://github.com/hashsploit/medius-wireshark"
 }
 
-local callbackstatus = {
-	[0] = {name="MediusSuccess", desc="Success."},
-	[1] = {name="MediusNoResult", desc="No results. This is a valid state."},
-	[2] = {name="MediusRequestAccepted", desc="The request has been accepted."},
-	[3] = {name="MediusWorldCreatedSizeReduced", desc="The world has been created with reduced size."}
-}
-
--- MEDIUS
-local medius_protocol = Proto("medius",  "Medius Protocol")
-
-local medius_protocol_msg_type = ProtoField.string("medius.type", "Message Type", base.NONE)
-local medius_protocol_msg_length = ProtoField.uint8("medius.length", "Message Length", base.DEC_HEX)
-local medius_protocol_msg_encrypted = ProtoField.bool("medius.encrypted", "Message Encrypted", base.BOOLEAN)
-local medius_protocol_msg_chksum = ProtoField.uint16("medius.chksum", "Message Checksum", base.HEX)
-local medius_protocol_msg_data = ProtoField.bytes("medius.data", "Message Data", base.SPACE)
-local medius_protocol_msg_app = ProtoField.protocol("medius.app", "Application Data", base.NONE)
-
-local medius_app_protocol_type = ProtoField.string("medius.app.type", "App Message Type", base.NONE)
-local medius_app_protocol_id = ProtoField.bytes("medius.app.id", "App Message Id", base.NONE)
-local medius_app_protocol_data = ProtoField.bytes("medius.app.data", "App Message Data", base.SPACE)
-
-medius_protocol.fields = {
-	medius_protocol_msg_type,
-	medius_protocol_msg_length,
-	medius_protocol_msg_encrypted,
-	medius_protocol_msg_chksum,
-	medius_protocol_msg_data,
-	medius_protocol_msg_app,
+function string:split(delimiter)
+	local result = {}
+	local from  = 1
+	local delim_from, delim_to = string.find(self, delimiter, from)
 	
-	medius_app_protocol_type,
-	medius_app_protocol_id,
-	medius_app_protocol_data
-}
+	while delim_from do
+		table.insert( result, string.sub(self, from, delim_from-1))
+		from = delim_to + 1
+		delim_from, delim_to = string.find(self, delimiter, from)
+	end
+	
+	table.insert(result, string.sub(self, from))
+	return result
+end
 
-function add_pkt_field(packet, datatype, filter, name, fieldbase)
-	for k, _ in pairs(mediusids) do
-		if mediusids[k].name == packet then
-			if mediusids[k].fields == nil then
-				mediusids[k].fields = {}
+local function get_current_path()
+	local delimiter = package.path:sub(1, 1)
+	local split_path = string.split(string.sub(debug.getinfo(1).source, 2), delimiter)
+	local path = ""
+
+	for k, v in pairs(split_path) do
+		if k > 1 and k < #split_path then
+			path = path .. delimiter .. v
+		end
+	end
+	
+	return path .. delimiter
+end
+
+local agreement_path = get_current_path() .. "agree.tmp"
+
+set_plugin_info(plugin_info)
+
+function log(msg)
+	print("[Medius Wireshark Dissector] " .. tostring(msg))
+end
+
+function file_exists(name)
+	local f = io.open(name, "r")
+	if f~=nil then io.close(f) return true else return false end
+end
+
+log("Version " .. plugin_info["version"])
+log("Initializing (stage 1) ...")
+
+local medius_protocol = Proto("medius",  "Medius Protocol")
+medius_protocol.fields = {}
+
+local medius_protocol_msg = {}
+medius_protocol_msg["type"] = ProtoField.string("medius.type", "Message Type", base.NONE)
+medius_protocol_msg["length"] = ProtoField.uint8("medius.length", "Message Length", base.DEC_HEX)
+medius_protocol_msg["encrypted"] = ProtoField.string("medius.encrypted", "Message Encrypted", base.NONE)
+medius_protocol_msg["chksum"] = ProtoField.uint16("medius.chksum", "Message Checksum", base.HEX)
+medius_protocol_msg["data"] = ProtoField.bytes("medius.data", "Message Data", base.SPACE)
+medius_protocol_msg["app"] = ProtoField.protocol("medius.app", "Application Data", base.NONE)
+
+local medius_app_protocol = {}
+medius_app_protocol["type"] = ProtoField.string("medius.app.type", "App Message Type", base.NONE)
+
+for i, _ in pairs(medius_protocol_msg) do
+	table.insert(medius_protocol.fields, medius_protocol_msg[i])
+end
+
+for i, _ in pairs(medius_app_protocol) do
+	table.insert(medius_protocol.fields, medius_app_protocol[i])
+end
+
+-- Add RT Types
+for i, _ in pairs(rtids) do
+	
+	for j, _ in pairs(rtids[i]) do
+		
+		if j ~= nil and j:match("struct_") then
+			
+			for k, _ in pairs(rtids[i][j]) do
+				local object = rtids[i][j][k]
+				local d_type = object.type
+				local d_id = object.id
+				local d_name = object.name
+				local d_length = object.length
+				local d_display = object.display or base.NONE
+				local d_enum = object.enum
+				local d_optional = object.optional
+				
+				if rtids[i].fields == nil then
+					rtids[i].fields = {}
+				end
+				
+				if d_enum ~= nil then
+					d_type = "string"
+					d_display = base.NONE
+				end
+				
+				local fulldomain = "medius.pkt." .. rtids[i].name .. "." .. j .."." .. d_id
+				
+				rtids[i].fields[j .. "." .. d_id] = ProtoField[d_type](fulldomain, d_name, d_display)
+				table.insert(medius_protocol.fields, rtids[i].fields[j.."."..d_id])
+				
 			end
 			
-			local fulldomain = "medius.app.pkt."..packet.."."..filter
-			mediusids[k].fields[filter] = ProtoField[datatype](fulldomain, name, fieldbase)
 			
-			table.insert(medius_protocol.fields, mediusids[k].fields[filter])
 		end
 	end
 end
 
-add_pkt_field("PolicyResponse", "uint8", "status", "Callback Status", base.DEC_HEX)
-add_pkt_field("PolicyResponse", "string", "message", "Policy Message", base.NONE)
-add_pkt_field("PolicyResponse", "bool", "endofmsg", "End of Message", base.BOOLEAN)
-
-function medius_protocol.dissector(buffer, pinfo, tree)
-	local length = buffer:len()
-	
-	if length < 3 then
-		return
+-- Add Medius Types
+for i, _ in pairs(mediustypes) do
+	if mediustypes[i].struct ~= nil then
+		for j, _ in ipairs(mediustypes[i].struct) do
+			local object = mediustypes[i].struct[j]
+			local d_type = object.type
+			local d_id = object.id
+			local d_name = object.name
+			local d_length = object.length
+			local d_display = object.display or base.NONE
+			local d_enum = object.enum
+			
+			if mediustypes[i].fields == nil then
+				mediustypes[i].fields = {}
+			end
+			
+			if d_enum ~= nil then
+				d_type = "string"
+				d_display = base.NONE
+			end
+			
+			local fulldomain = "medius.app.pkt." .. mediustypes[i].name .."." .. d_id
+			
+			mediustypes[i].fields[d_id] = ProtoField[d_type](fulldomain, d_name, d_display)
+			table.insert(medius_protocol.fields, mediustypes[i].fields[d_id])
+		end
 	end
+end
 
-	pinfo.cols.protocol = medius_protocol.name
+local function init()
+	log("Initializing (stage 2) ...")
+	
+	---------------------------------------------
+	-- Dissector
+	---------------------------------------------
 
-	local subtree = tree:add(medius_protocol, buffer(), "Medius Protocol Data")
-
-	local encrypted = false
-	
-	-- Check if the packet is encrypted
-	if buffer(0,1):uint() >= 0x80 then
-		encrypted = true
-	end
-	
-	local offset = 0
-	local rtid = buffer(offset, 1):uint()
-
-	-- Set info column string
-	pinfo.cols.info = rtids[rtid].name .. " "
-	
-	subtree:add_le(medius_protocol_msg_type, rtids[rtid].name .. " (" .. string.format("%#.2x", rtid) .. ")")
-	offset = offset + 1
-	
-	subtree:add_le(medius_protocol_msg_length, buffer(offset, 2))
-	offset = offset + 2
-	
-	subtree:add(medius_protocol_msg_encrypted, encrypted)
-	
-	if buffer(1, 2):uint() == 0 then
-		return
-	end
-	
-	-- TODO: parse multiple message frames in a single packet
-	
-	-- If the message is encrypted ...
-	if encrypted then
-		subtree:add_le(medius_protocol_msg_chksum, buffer(offset, 4))
-		offset = offset + 4
+	medius_protocol.dissector = function(buffer, pinfo, tree)
+		local length = buffer:len()
+		local medius_protocol_msg = medius_protocol_msg
 		
-		-- Show raw encrypted data
-		subtree:add_le(medius_protocol_msg_data, buffer(offset, length - offset))
-	else
-		-- Just show raw data
-		subtree:add_le(medius_protocol_msg_data, buffer(offset, length - offset))
+		if length < 3 then
+			return
+		end
+
+		pinfo.cols.protocol = medius_protocol.name
+
+		local subtree = tree:add(medius_protocol, buffer(), "Medius Protocol Data")
+
+		local encrypted = false
 		
-		-- If this is an "APP" packet ...
-		if string.match(rtids[rtid].name, "APP") then
+		-- Check if the packet is encrypted
+		if buffer(0,1):uint() >= 0x80 then
+			encrypted = true
+		end
+		
+		local offset = 0
+		local rtid = buffer(offset, 1):uint()
+
+		-- Set info column string
+		--pinfo.cols.packet_len
+		pinfo.cols.info = pinfo.src_port .. " → " .. pinfo.dst_port .. " [" .. rtids[rtid].name .. "] "
+		
+		subtree:add_le(medius_protocol_msg["type"], buffer(offset, 1), rtids[rtid].name .. " (" .. string.format("0x%02x", rtid) .. ")")
+		offset = offset + 1
+		
+		subtree:add_le(medius_protocol_msg["length"], buffer(offset, 2))
+		offset = offset + 2
+		
+		subtree:add(medius_protocol_msg["encrypted"], buffer(0, 1), (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " > " or " < ") .. "0x80)")
+		
+		if buffer(1, 2):uint() == 0 then
+			return
+		end
+		
+		-- TODO: parse multiple message frames in a single packet
+		
+		-- If the message is encrypted ...
+		if encrypted then
+			subtree:add_le(medius_protocol_msg["chksum"], buffer(offset, 4))
+			offset = offset + 4
 			
-			local appmsgtype = buffer(offset, 2):le_uint()
-			offset = offset + 2
+			-- Show raw encrypted data
+			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
+		else
 			
-			-- Show application data
-			local apptree = subtree:add(medius_protocol_msg_app, buffer(offset), "Application Data")
-			
-			for k, _ in pairs(mediusids) do
-				if k == appmsgtype then
-					-- Update info column string
-					pinfo.cols.info = rtids[rtid].name .. " (" .. mediusids[k].name .. ")"
+			--[[
+			for i, _ in pairs(rtids[rtid]) do
+				if i:match("struct_") ~= nil then
+					local struct_name = i
+					local medius_version_number = tonumber(i:split("struct_")[2])
+					local medius_version = tostring((medius_version_number * 1.00) / 100)
+					local total_struct_length = 0
 					
-					apptree:add(medius_app_protocol_type, mediusids[appmsgtype].name .. " (" .. string.format("%#.2x", appmsgtype) .. ")")
-					apptree:add_le(medius_app_protocol_id, buffer(offset, 24))
-					offset = offset + 24
-					
-					if offset ~= length then
-						apptree:add_le(medius_app_protocol_data, buffer(offset, length - offset))
-					else
-						apptree:add(medius_app_protocol_data, "No payload!")
+					for j, _ in pairs(rtids[rtid][struct_name]) do
+						local struct = rtids[rtid][struct_name][j]
+						
+						if struct.optional ~= nil and struct.optional == true then
+							if total_struct_length == (length - offset) then
+								
+								local d_type = struct.type
+								local d_id = struct.id
+								local d_name = struct.name
+								local d_length = struct.length
+								local d_display = struct.display or base.NONE
+								local d_enum = struct.enum
+								local field = rtids[rtid].fields[struct_name.."."..d_id]
+								local displaytext = nil
+								
+								if d_enum ~= nil then
+									for k, _ in pairs(d_enum) do
+										if k == buffer(offset, d_length):le_uint() then
+											local hexlen = tostring(d_length)
+											if d_length <= 9 then
+												hexlen = "0" .. tostring(d_length)
+											end
+											if d_length <= 99 then
+												hexlen = "00" .. tostring(d_length)
+											end
+											if d_length <= 999 then
+												hexlen = "000" .. tostring(d_length)
+											end
+											displaytext = d_enum[k].name .. " (" .. k .. ") (" .. string.format("0x%" .. hexlen .. "x", k) .. ")"
+										end
+									end
+								end
+								
+								if displaytext ~= nil then
+									subtree:add(field, buffer(offset, d_length), displaytext)
+								else
+									if d_type == "uint8" or d_type == "uint16" or d_type == "uint32" then
+										subtree:add_le(field, buffer(offset, d_length))
+									else
+										subtree:add(field, buffer(offset, d_length))
+									end
+								end
+								
+								offset = offset + d_length
+								
+								break
+							end
+						end
+						
+						total_struct_length = total_struct_length + struct.length
+						
+						if total_struct_length == (length - offset) then
+							
+							local d_type = struct.type
+							local d_id = struct.id
+							local d_name = struct.name
+							local d_length = struct.length
+							local d_display = struct.display or base.NONE
+							local d_enum = struct.enum
+							local field = rtids[rtid].fields[struct_name.."."..d_id]
+							local displaytext = nil
+							
+							if d_enum ~= nil then
+								for k, _ in pairs(d_enum) do
+									if k == buffer(offset, d_length):le_uint() then
+										local hexlen = tostring(d_length)
+										if d_length <= 9 then
+											hexlen = "0" .. tostring(d_length)
+										end
+										if d_length <= 99 then
+											hexlen = "00" .. tostring(d_length)
+										end
+										if d_length <= 999 then
+											hexlen = "000" .. tostring(d_length)
+										end
+										displaytext = d_enum[k].name .. " (" .. k .. ") (" .. string.format("0x%" .. hexlen .. "x", k) .. ")"
+									end
+								end
+							end
+							
+							if displaytext ~= nil then
+								subtree:add(field, buffer(offset, d_length), displaytext)
+							else
+								if d_type == "uint8" or d_type == "uint16" or d_type == "uint32" then
+									subtree:add_le(field, buffer(offset, d_length))
+								else
+									subtree:add(field, buffer(offset, d_length))
+								end
+							end
+							
+							offset = offset + d_length
+							
+							break
+						end
+						
 					end
 					
-					-- Parse data if applicable
-					if mediusids[k].name == "PolicyResponse" then
-						-- 4 int MediusCallbackStatus
-						-- char[POLICY_MAXLEN]
-						-- 4 int[EndOfText]
-						
-						apptree:add_le(mediusids[k].fields["status"], buffer(offset, 4))
-						offset = offset + 4
-						
-						apptree:add_le(mediusids[k].fields["message"], buffer(offset, 256))
-						offset = offset + 256
-						
-						apptree:add_le(mediusids[k].fields["endofmsg"], buffer(offset, 4))
-						offset = offset + 4
-					end
 					
 					
-					
-					break
 				end
 			end
+			--]]
+			
+			
+			-- Just show raw data
+			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
+			
+			
+			
+			
+			-- If this is an "APP" packet ...
+			if string.match(rtids[rtid].name, "APP") then
+				
+				local appmsgtype = buffer(offset, 2):le_uint()
+				offset = offset + 2
+				
+				-- Show application data
+				local apptree = subtree:add(medius_protocol_msg["app"], buffer(offset-2), "Application Data")
+				
+				
+				-- FIXME: this doesn't need to be in a loop ... just grab it from mediustypes[appmsgtype]
+				for i, _ in pairs(mediustypes) do
+					if i == appmsgtype then
+						
+						-- Update info column string
+						pinfo.cols.info:append(mediustypes[i].name .. " ")
+						
+						apptree:add(medius_app_protocol["type"], buffer(offset-2, 2), mediustypes[i].name .. " (" .. string.format("0x%04x", i) .. ")")
+						
+						if mediustypes[i].struct ~= nil then
+							for j, _ in ipairs(mediustypes[i].struct) do
+								local object = mediustypes[i].struct[j]
+								local d_type = object.type
+								local d_id = object.id
+								local d_name = object.name
+								local d_length = object.length
+								local d_display = object.display or base.NONE
+								local d_enum = object.enum
+								local field = mediustypes[i].fields[d_id]
+								local displaytext = nil
+								
+								if d_enum ~= nil then
+									for k, _ in pairs(d_enum) do
+										if k == buffer(offset, d_length):le_uint() then
+											local hexlen = tostring(d_length)
+											if d_length <= 9 then
+												hexlen = "0" .. tostring(d_length)
+											end
+											if d_length <= 99 then
+												hexlen = "00" .. tostring(d_length)
+											end
+											if d_length <= 999 then
+												hexlen = "000" .. tostring(d_length)
+											end
+											displaytext = d_enum[k].name .. " (" .. k .. ") (" .. string.format("0x%" .. hexlen .. "x", k) .. ")"
+										end
+									end
+								end
+								
+								if displaytext ~= nil then
+									apptree:add(field, buffer(offset, d_length), displaytext)
+								else
+									if d_type == "uint8" or d_type == "uint16" or d_type == "uint32" then
+										apptree:add_le(field, buffer(offset, d_length))
+									else
+										apptree:add(field, buffer(offset, d_length))
+									end
+								end
+								
+								offset = offset + d_length
+							end
+						end
+						
+						break
+					end
+				end
+				
+				
+				
+			end
 		end
 	end
 	
+	---------------------------------------------
+	-- Bindings
+	---------------------------------------------
+
+	local tcp_port = DissectorTable.get("tcp.port")
+	local udp_port = DissectorTable.get("udp.port")
+
+	--udp_port:add(10071, medius_nat_protocol) -- NAT
+
+	tcp_port:add(10071, medius_protocol) -- MUIS
+	tcp_port:add(10075, medius_protocol) -- MAS
+	tcp_port:add(10078, medius_protocol) -- MLS
+
+	--[[
+	tcp_port:add(10079, medius_dme_protocol) -- DME (TCP)
+	udp_port:add(50000, medius_dme_protocol) -- DME (UDP)
+	udp_port:add(50001, medius_dme_protocol) -- DME (UDP)
+	udp_port:add(50002, medius_dme_protocol) -- DME (UDP)
+	udp_port:add(50003, medius_dme_protocol) -- DME (UDP)
+	--]]
 	
+	-- Required in GUI
+	if gui_enabled() then
+		reload_packets()
+	end
+	
+	log("Initialized")
 	
 end
 
+local function show_agreement()
+	if not gui_enabled() then
+		log("This plugin requires the GUI to work!")
+		os.exit(5)
+		return
+	end
+	
+	local mwd_usage_agree = false
+	
+	-- create new text window and initialize its text
+	local win = TextWindow.new("Medius Wireshark Dissector Usage Agreement")
+	win:set_editable(false)
+	win:set("Medius Wireshark Dissector\n")
+	win:append(" - Version: " .. plugin_info["version"] .. "\n")
+	win:append(" - Author: " .. plugin_info["author"] .. "\n")
+	win:append(" - Website: " .. plugin_info["repository"] .. "\n\n")
+	win:append("By using this dissector you agree to the following:\n")
+	win:append(" - Not be a dick and use this plugin against other Medius servers you do not own or are not authorized to reverse engineer.\n")
+	win:append(" - Abide by the license and usage agreement this plugin is distributed under.\n")
+	win:append(" - When distributing this plugin/script to keep this usage agreement intact and provide credit to all the original author(s).\n\n")
+	win:append("______________________________\n\n")
+	win:append("MIT LICENSE\n")
+	win:append([[Copyright (c) 2020 hashsploit <hashsploit@protonmail.com>
 
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
--- NAT
-medius_nat_protocol = Proto("M-NAT",  "Medius Network Address Translation Protocol")
-medius_nat_protocol.fields = {}
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+]])
 
-function medius_nat_protocol.dissector(buffer, pinfo, tree)
-  length = buffer:len()
-  if length == 0 then return end
+	win:add_button("Website", function()
+		browser_open_url(plugin_info["repository"])
+	end)
 
-  pinfo.cols.protocol = medius_nat_protocol.name
+	win:add_button("Agree", function()
+		log("Usage agreement accepted!")
+		mwd_usage_agree = true
+		
+		local file = io.open(agreement_path, "w")
+		local current_date = tonumber(os.time(os.date("!*t")))
+		local path = get_current_path()
+		
+		file:write(plugin_info["version"] .. "\n")
+		file:write(current_date .. "\n")
+		file:write(path .. "\n")
+		
+		file:close()
+		
+		win:close()
+	end)
+	
+	win:add_button("Decline", function()
+		win:close()
+	end)
 
-  local subtree = tree:add(medius_nat_protocol, buffer(), "Medius NAT Protocol Data")
-  
+	-- print "closing" to stdout when the user closes the text windw
+	win:set_atclose(function()
+		
+		if not mwd_usage_agree then
+			log("Usage agreement declined!")
+			os.exit(12)
+			return
+		end
+		
+		init()
+	end)
+	
 end
 
--- DME
-medius_dme_protocol = Proto("M-DME",  "Medius Distributed Memory Engine Protocol")
-medius_dme_protocol.fields = {}
-
-function medius_dme_protocol.dissector(buffer, pinfo, tree)
-  length = buffer:len()
-  if length == 0 then return end
-
-  pinfo.cols.protocol = medius_dme_protocol.name
-
-  local subtree = tree:add(medius_dme_protocol, buffer(), "Medius DME Protocol Data")
-  
+local function check_agreement()
+	
+	if not file_exists(agreement_path) then
+		show_agreement()
+		return
+	end
+	
+	local file = io.open(agreement_path, "r")
+	local version = file:read()
+	local current_date = tonumber(os.time(os.date("!*t")))
+	local agreed_date = file:read()
+	local path = file:read()
+	file:close()
+	
+	log("Agreement file version: " .. tostring(version))
+	
+	if version == nil or agreed_date == nil or path == nil then
+		os.remove(agreement_path)
+		show_agreement()
+		return
+	end
+	
+	if not (tonumber(agreed_date) >= 1) then
+		os.remove(agreement_path)
+		show_agreement()
+		return
+	end
+	
+	if version ~= plugin_info["version"] or current_date > (agreed_date + (30 * (60 * 60 * 24))) or path ~= get_current_path() then
+		os.remove(agreement_path)
+		show_agreement()
+		return
+	end
+	
+	init()
 end
 
-
-
-
-
-
-
-local tcp_port = DissectorTable.get("tcp.port")
-local udp_port = DissectorTable.get("udp.port")
-
-udp_port:add(10071, medius_nat_protocol) -- NAT
-
-tcp_port:add(10071, medius_protocol) -- MUIS
-tcp_port:add(10075, medius_protocol) -- MAS
-tcp_port:add(10078, medius_protocol) -- MLS
-
-tcp_port:add(10079, medius_dme_protocol) -- DME (TCP)
-udp_port:add(50000, medius_dme_protocol) -- DME (UDP)
-udp_port:add(50001, medius_dme_protocol) -- DME (UDP)
-udp_port:add(50002, medius_dme_protocol) -- DME (UDP)
-udp_port:add(50003, medius_dme_protocol) -- DME (UDP)
+check_agreement()
 
