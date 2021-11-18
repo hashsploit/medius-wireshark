@@ -666,7 +666,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.2.2",
+	version = "1.2.3",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
@@ -710,9 +710,6 @@ local function get_current_path()
 	
 	return path .. delimiter
 end
-
-print(get_current_path())
-print("==================")
 
 local agreement_path = get_current_path() .. "agree.tmp"
 
@@ -1111,7 +1108,11 @@ local function show_agreement()
 	win:set("Medius Wireshark Dissector\n")
 	win:append(" - Version: " .. plugin_info["version"] .. "\n")
 	win:append(" - Author: " .. plugin_info["author"] .. "\n")
-	win:append(" - Website: " .. plugin_info["repository"] .. "\n\n")
+	win:append(" - Website: " .. plugin_info["repository"] .. "\n")
+	win:append(" - Wireshark Version: " .. get_version() .. "\n")
+	win:append(" - Lua Version: " .. _VERSION .. "\n")
+	win:append("\n")
+	
 	win:append("By using this dissector you agree to the following:\n")
 	win:append(" - Not be a dick and use this plugin against other Medius servers you do not own or are not authorized to reverse engineer.\n")
 	win:append(" - Abide by the license and usage agreement this plugin is distributed under.\n")
