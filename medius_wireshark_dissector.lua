@@ -666,7 +666,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.2.1",
+	version = "1.2.2",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
@@ -688,17 +688,31 @@ end
 
 local function get_current_path()
 	local delimiter = package.path:sub(1, 1)
+	
+	-- Windows fix
+	if delimiter ~= "/" then
+		delimiter = "\\"
+	end
+	
 	local split_path = string.split(string.sub(debug.getinfo(1).source, 2), delimiter)
 	local path = ""
-
+	
 	for k, v in pairs(split_path) do
 		if k > 1 and k < #split_path then
 			path = path .. delimiter .. v
 		end
 	end
 	
+	-- Windows fix
+	if delimiter ~= "/" then
+		path = split_path[1] .. path
+	end
+	
 	return path .. delimiter
 end
+
+print(get_current_path())
+print("==================")
 
 local agreement_path = get_current_path() .. "agree.tmp"
 
