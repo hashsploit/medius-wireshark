@@ -683,7 +683,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.2.4",
+	version = "1.3.0",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
@@ -872,10 +872,10 @@ local function init()
 			adjusted_rtid = rtid - 0x80
 		end
 		
-		local rt_name = rtids[adjusted_rtid].name
+		local rt_name = "UNKNOWN"
 		
-		if rtids[adjusted_rtid].name == nil then
-			rt_name = "UNKNOWN"
+		if rtids[adjusted_rtid] ~= nil then
+			rt_name = rtids[adjusted_rtid].name
 		end
 		
 		-- This packet is potentially a fragment?
@@ -1022,8 +1022,9 @@ local function init()
 			-- Just show raw data
 			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
 			
-			
-			
+			if rtids[adjusted_rtid] == nil then
+				return
+			end
 			
 			-- If this is an "APP" packet ...
 			if string.match(rtids[adjusted_rtid].name, "APP") then
