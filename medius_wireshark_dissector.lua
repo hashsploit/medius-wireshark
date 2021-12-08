@@ -247,7 +247,12 @@ local rtids = {
 	[0x33] = {name="RT_MSG_CLIENT_APP_SINGLE_QOS", desc=nil},
 	[0x34] = {name="RT_MSG_CLIENT_APP_LIST_QOS", desc=nil},
 	[0x35] = {name="RT_MSG_CLIENT_MAX_MSGLEN", desc=nil},
-	[0x36] = {name="RT_MSG_SERVER_MAX_MSGLEN", desc=nil}
+	[0x36] = {name="RT_MSG_SERVER_MAX_MSGLEN", desc=nil},
+	
+	-- PlayStation 3
+	[0x3b] = {name="RT_MSG_CLIENT_MULTI_APP_TO_SERVER", desc="Used to send multiple 0x0a App_To_Server and/or 0x05 client echos."},
+	[0x3d] = {name="RT_MSG_CLIENT_APP_TO_PLUGIN", desc="Zipper Interactive Games Only."},
+	[0x3e] = {name="RT_MSG_SERVER_PLUGIN_TO_APP", desc="Zipper Interactive Games Only."}
 }
 
 ---------------------------------------------
@@ -658,7 +663,19 @@ local mediustypes = {
 	[0x3904] = {name="AccountUpdateStats_OpenAccess"},
 	[0x3A04] = {name="AccountUpdateStats_OpenAccessResponse"},
 	[0x3B04] = {name="AddPlayerToClan_ByClanOfficer"},
-	[0x3C04] = {name="AddPlayerToClan_ByClanOfficerResponse"}
+	[0x3C04] = {name="AddPlayerToClan_ByClanOfficerResponse"},
+	[0x0054] = {name="UnkRequestKz2"},
+	[0x0055] = {name="UnkResponseKz2"},
+	[0x0056] = {name="PlayerInfo1"},
+	[0x0058] = {name="TicketLogin"},
+	[0x0059] = {name="TicketLoginResponse"},
+	[0x005A] = {name="SetLocalizationParams2"},
+	[0x005B] = {name="SetLocalizationParams2Response"},
+	[0x007B] = {name="SetLocalizationParams1"},
+	[0x008B] = {name="SessionBegin1"},
+	[0x0086] = {name="SetLobbyWorldFilter1"},
+	[0x0087] = {name="SetLobbyWorldFilterResponse1"},
+	[0x0075] = {name="CreateClan2"}
 }
 
 ---------------------------------------------
@@ -666,7 +683,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.2.3",
+	version = "1.2.4",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
@@ -831,35 +848,53 @@ local function init()
 			return
 		end
 
-		pinfo.cols.protocol = medius_protocol.name
-
 		local subtree = tree:add(medius_protocol, buffer(), "Medius Protocol Data")
-
-		local encrypted = false
+		
+		local rtid          = buffer(0, 1):uint()
+		local adjusted_rtid = rtid
+		local encrypted     = false
 		
 		-- Check if the packet is encrypted
-		if buffer(0,1):uint() >= 0x80 then
+		if rtid >= 0x80 then
 			encrypted = true
+			adjusted_rtid = rtid - 0x80
 		end
 		
-		local offset = 0
-		local rtid = buffer(offset, 1):uint()
-
-		-- Set info column string
-		--pinfo.cols.packet_len
-		pinfo.cols.info = pinfo.src_port .. " → " .. pinfo.dst_port .. " [" .. rtids[rtid].name .. "] "
+		local offset        = 0
+		local rt_length     = buffer(1, 2):le_uint()
+		local hash_offset   = (encrypted and 4 or 0)
 		
-		subtree:add_le(medius_protocol_msg["type"], buffer(offset, 1), rtids[rtid].name .. " (" .. string.format("0x%02x", rtid) .. ")")
+		if rt_length > (length - (1 + 2 + hash_offset)) then
+			return
+		end
+		
+		if encrypted then
+			adjusted_rtid = rtid - 0x80
+		end
+		
+		local rt_name = rtids[adjusted_rtid].name
+		
+		if rtids[adjusted_rtid].name == nil then
+			rt_name = "UNKNOWN"
+		end
+		
+		-- This packet is potentially a fragment?
+		if rt_length ~= (length - (1 + 2 + hash_offset)) and not encrypted then
+			rt_name = rt_name .. "*"
+		end
+		
+		-- Set column info
+		pinfo.cols.protocol = medius_protocol.name
+		pinfo.cols.info = pinfo.src_port .. " → " .. pinfo.dst_port .. " [" .. rt_name .. "] "
+		
+		-- Set RT dissection info
+		subtree:add_le(medius_protocol_msg["type"], buffer(offset, 1), rt_name .. " (" .. string.format("0x%02x", adjusted_rtid) .. ")")
 		offset = offset + 1
 		
 		subtree:add_le(medius_protocol_msg["length"], buffer(offset, 2))
 		offset = offset + 2
 		
-		subtree:add(medius_protocol_msg["encrypted"], buffer(0, 1), (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " > " or " < ") .. "0x80)")
-		
-		if buffer(1, 2):uint() == 0 then
-			return
-		end
+		subtree:add(medius_protocol_msg["encrypted"], (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " > " or " < ") .. "0x80)")
 		
 		-- TODO: parse multiple message frames in a single packet
 		
@@ -991,7 +1026,7 @@ local function init()
 			
 			
 			-- If this is an "APP" packet ...
-			if string.match(rtids[rtid].name, "APP") then
+			if string.match(rtids[adjusted_rtid].name, "APP") then
 				
 				local appmsgtype = buffer(offset, 2):le_uint()
 				offset = offset + 2
@@ -1070,19 +1105,27 @@ local function init()
 	local tcp_port = DissectorTable.get("tcp.port")
 	local udp_port = DissectorTable.get("udp.port")
 
-	--udp_port:add(10071, medius_nat_protocol) -- NAT
-
 	tcp_port:add(10071, medius_protocol) -- MUIS
+		tcp_port:add(20071, medius_protocol)
+		tcp_port:add(30071, medius_protocol)
+	
 	tcp_port:add(10075, medius_protocol) -- MAS
+		tcp_port:add(20075, medius_protocol)
+		tcp_port:add(30075, medius_protocol)
+	
 	tcp_port:add(10078, medius_protocol) -- MLS
-
-	--[[
-	tcp_port:add(10079, medius_dme_protocol) -- DME (TCP)
-	udp_port:add(50000, medius_dme_protocol) -- DME (UDP)
-	udp_port:add(50001, medius_dme_protocol) -- DME (UDP)
-	udp_port:add(50002, medius_dme_protocol) -- DME (UDP)
-	udp_port:add(50003, medius_dme_protocol) -- DME (UDP)
-	--]]
+		tcp_port:add(20078, medius_protocol)
+		tcp_port:add(30078, medius_protocol)
+	
+	tcp_port:add(10079, medius_protocol) -- DME (TCP)
+	
+	udp_port:add(50000, medius_protocol) -- DME (UDP)
+		udp_port:add(50001, medius_protocol)
+		udp_port:add(50002, medius_protocol)
+		udp_port:add(50003, medius_protocol)
+		udp_port:add(51000, medius_protocol)
+	
+	--udp_port:add(10070, medius_nat_protocol) -- NAT
 	
 	-- Required in GUI
 	if gui_enabled() then
