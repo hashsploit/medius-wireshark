@@ -9,12 +9,18 @@
 local const = {}
 const.MESSAGEID_MAXLEN = 21
 const.POLICY_MAXLEN = 256
+const.SESSIONKEY_MAXLEN = 17
 const.NET_MAX_IP_LENGTH = 16 -- This macro defines the length of an IP address string including the null terminator.
 const.NET_MAX_ADDRESS_STR_LENGTH = 18 -- This macro defines the maximum length of an IP address (16 bytes) or MAC Address (18 bytes) (including the null terminator).
 const.NET_ADDRESS_LIST_COUNT = 2 -- This macro determines the number of addresses in an address list.
 const.NET_SESSION_KEY_LEN = 17 -- This macro determines the length of a session key as used in ConnectionInfo (includes NULL terminator).
 const.NET_ACCESS_KEY_LEN = 17 -- This macro determines the length of an access key as used in ConnectionInfo (includes NULL terminator).
+const.DNASSIGNATURE_MAXLEN = 32
 
+local MediusPolicyType = {
+	[0] = {name="Usage", desc="Usage policy."},
+	[1] = {name="Privacy", desc="Privacy policy."}
+}
 
 local MediusConnectionType = {
 	[0] = {name="MODEM", desc="The connection is on a modem."},
@@ -37,6 +43,36 @@ local MediusCallbackStatus = {
 	[-941] = {name="MediusTransactionCanceled", desc="The transaction has been cancelled."},
 	[-942] = {name="MediusGatewayError", desc="There is an internal gateway error."}
 	-- TODO: add more
+}
+
+local MediusCharacterEncodingType = {
+	[0] = {name="NO_UPDATE", desc="No change to the current encoding."},
+	[1] = {name="ISO_8859_1", desc="ISO-8859-1 single byte encoding 0x00 - 0xFF."},
+	[2] = {name="UTF_8", desc="UTF-8 multibyte encoding."}
+}
+
+local MediusLanguageType = {
+	[0] = {name="NO_UPDATE", desc="No update to the language."},
+	[1] = {name="US_ENGLISH", desc="US English."},
+	[2] = {name="UK_ENGLISH", desc="UK English."},
+	[3] = {name="JAPANESE", desc="Japanese."},
+	[4] = {name="KOREAN", desc="Korean."},
+	[5] = {name="ITALIAN", desc="Italian."},
+	[6] = {name="SPANISH", desc="Spanish."},
+	[7] = {name="GERMAN", desc="German."},
+	[8] = {name="FRENCH", desc="French."},
+	[9] = {name="DUTCH", desc="Dutch."},
+	[10] = {name="PORTUGUESE", desc="Portuguese."},
+	[11] = {name="CHINESE", desc="Chinese."},
+	[12] = {name="TAIWANESE", desc="Taiwanese."},
+	[13] = {name="FINNISH", desc="Finnish."},
+	[14] = {name="NORWEGIAN", desc="Norwegian."}
+}
+
+local MediusDnasCategory = {
+	[0] = {name="CONSOLE_ID", desc="DNAS Console ID."},
+	[1] = {name="TITLE_ID", desc="DNAS Title ID."},
+	[2] = {name="DISK_ID", desc="DNAS Disk Id."}
 }
 
 local ApplicationId = {
@@ -248,7 +284,7 @@ local rtids = {
 	[0x34] = {name="RT_MSG_CLIENT_APP_LIST_QOS", desc=nil},
 	[0x35] = {name="RT_MSG_CLIENT_MAX_MSGLEN", desc=nil},
 	[0x36] = {name="RT_MSG_SERVER_MAX_MSGLEN", desc=nil},
-	
+
 	-- PlayStation 3
 	[0x3b] = {name="RT_MSG_CLIENT_MULTI_APP_TO_SERVER", desc="Used to send multiple 0x0a App_To_Server and/or 0x05 client echos."},
 	[0x3d] = {name="RT_MSG_CLIENT_APP_TO_PLUGIN", desc="Zipper Interactive Games Only."},
@@ -317,15 +353,55 @@ local mediustypes = {
 			},
 			{
 				type = "uint8",
-				id = "medius_connection_type",
-				name = "Medius Connection Type",
+				id = "connection_type",
+				name = "Connection Type",
 				length = 4,
 				display = base.DEC_HEX,
 				enum = MediusConnectionType
 			}
 		}
 	},
-	[0x0401] = {name="SessionBeginResponse"},
+	[0x0401] = {
+		name = "SessionBeginResponse",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "callback_status",
+				name = "Callback Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCallbackStatus
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			}
+		}
+	},
 	[0x0501] = {name="SessionEnd"},
 	[0x0601] = {name="SessionEndResponse"},
 	[0x0701] = {name="AccountLogin"},
@@ -391,7 +467,40 @@ local mediustypes = {
 	[0x4401] = {name="AddToBuddyListConfirmationResponse"},
 	[0x4501] = {name="AddToBuddyListFwdConfirmationRequest0"},
 	[0x4601] = {name="AddToBuddyListFwdConfirmationResponse0"},
-	[0x4701] = {name="Policy"},
+	[0x4701] = {
+		name = "Policy",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 2,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "policy_type",
+				name = "Policy Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusPolicyType
+			}
+		}
+	},
 	[0x4801] = {
 		name = "PolicyResponse",
 		struct = {
@@ -411,7 +520,7 @@ local mediustypes = {
 			},
 			{
 				type = "uint8",
-				id = "status",
+				id = "callback_status",
 				name = "Callback Status",
 				length = 4,
 				display = base.DEC_HEX,
@@ -426,7 +535,7 @@ local mediustypes = {
 			},
 			{
 				type = "bool",
-				id = "endofmsg",
+				id = "end_of_message",
 				name = "End of Message",
 				length = 4,
 				display = base.BOOLEAN
@@ -523,8 +632,75 @@ local mediustypes = {
 	[0xA001] = {name="GetLobbyPlayerNamesResponse"},
 	[0xA101] = {name="GetTotalUsers"},
 	[0xA201] = {name="GetTotalUsersResponse"},
-	[0xA301] = {name="SetLocalizationParams"},
-	[0xA401] = {name="SetLocalizationParamsResponse"},
+	[0xA301] = {
+		name = "SetLocalizationParams",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 2,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "chararcter_encoding_type",
+				name = "Character Encoding Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCharacterEncodingType
+			},
+			{
+				type = "uint8",
+				id = "language_type",
+				name = "Language Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusLanguageType
+			}
+		}
+	},
+	[0xA401] = {
+		name = "SetLocalizationParamsResponse",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "callback_status",
+				name = "Callback Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCallbackStatus
+			}
+		}
+	},
 	[0xA501] = {name="FileCreate"},
 	[0xA601] = {name="FileCreateResponse"},
 	[0xA701] = {name="FileUpload"},
@@ -619,7 +795,61 @@ local mediustypes = {
 	[0x0704] = {name="AddToBuddyListFwdConfirmationResponse"},
 	[0x0804] = {name="GetBuddyInvitations"},
 	[0x0904] = {name="GetBuddyInvitationsResponse"},
-	[0x0A04] = {name="DnasSignaturePost"},
+	[0x0A04] = {
+		name = "DnasSignaturePost",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 2,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "dnas_signature_type",
+				name = "DNAS Signature Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusDnasCategory
+			},
+			{
+				type = "bytes",
+				id = "dnas_signature_length",
+				name = "DNAS Signature Length",
+				length = 1,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "dnas_signature_length",
+				name = "DNAS Signature",
+				length = const.DNASSIGNATURE_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 2,
+				display = base.SPACE
+			}
+		}
+	},
 	[0x0B04] = {name="UpdateLadderStatsWide"},
 	[0x0C04] = {name="UpdateLadderStatsWideResponse"},
 	[0x0D04] = {name="GetLadderStatsWide"},
@@ -683,7 +913,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.3.0",
+	version = "1.3.1",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
@@ -692,39 +922,39 @@ function string:split(delimiter)
 	local result = {}
 	local from  = 1
 	local delim_from, delim_to = string.find(self, delimiter, from)
-	
+
 	while delim_from do
 		table.insert( result, string.sub(self, from, delim_from-1))
 		from = delim_to + 1
 		delim_from, delim_to = string.find(self, delimiter, from)
 	end
-	
+
 	table.insert(result, string.sub(self, from))
 	return result
 end
 
 local function get_current_path()
 	local delimiter = package.path:sub(1, 1)
-	
+
 	-- Windows fix
 	if delimiter ~= "/" then
 		delimiter = "\\"
 	end
-	
+
 	local split_path = string.split(string.sub(debug.getinfo(1).source, 2), delimiter)
 	local path = ""
-	
+
 	for k, v in pairs(split_path) do
 		if k > 1 and k < #split_path then
 			path = path .. delimiter .. v
 		end
 	end
-	
+
 	-- Windows fix
 	if delimiter ~= "/" then
 		path = split_path[1] .. path
 	end
-	
+
 	return path .. delimiter
 end
 
@@ -768,11 +998,11 @@ end
 
 -- Add RT Types
 for i, _ in pairs(rtids) do
-	
+
 	for j, _ in pairs(rtids[i]) do
-		
+
 		if j ~= nil and j:match("struct_") then
-			
+
 			for k, _ in pairs(rtids[i][j]) do
 				local object = rtids[i][j][k]
 				local d_type = object.type
@@ -782,24 +1012,24 @@ for i, _ in pairs(rtids) do
 				local d_display = object.display or base.NONE
 				local d_enum = object.enum
 				local d_optional = object.optional
-				
+
 				if rtids[i].fields == nil then
 					rtids[i].fields = {}
 				end
-				
+
 				if d_enum ~= nil then
 					d_type = "string"
 					d_display = base.NONE
 				end
-				
+
 				local fulldomain = "medius.pkt." .. rtids[i].name .. "." .. j .."." .. d_id
-				
+
 				rtids[i].fields[j .. "." .. d_id] = ProtoField[d_type](fulldomain, d_name, d_display)
 				table.insert(medius_protocol.fields, rtids[i].fields[j.."."..d_id])
-				
+
 			end
-			
-			
+
+
 		end
 	end
 end
@@ -815,18 +1045,18 @@ for i, _ in pairs(mediustypes) do
 			local d_length = object.length
 			local d_display = object.display or base.NONE
 			local d_enum = object.enum
-			
+
 			if mediustypes[i].fields == nil then
 				mediustypes[i].fields = {}
 			end
-			
+
 			if d_enum ~= nil then
 				d_type = "string"
 				d_display = base.NONE
 			end
-			
+
 			local fulldomain = "medius.app.pkt." .. mediustypes[i].name .."." .. d_id
-			
+
 			mediustypes[i].fields[d_id] = ProtoField[d_type](fulldomain, d_name, d_display)
 			table.insert(medius_protocol.fields, mediustypes[i].fields[d_id])
 		end
@@ -835,7 +1065,7 @@ end
 
 local function init()
 	log("Initializing (stage 2) ...")
-	
+
 	---------------------------------------------
 	-- Dissector
 	---------------------------------------------
@@ -843,70 +1073,74 @@ local function init()
 	medius_protocol.dissector = function(buffer, pinfo, tree)
 		local length = buffer:len()
 		local medius_protocol_msg = medius_protocol_msg
-		
+
 		if length < 3 then
 			return
 		end
 
+		local offset = 0
+
+
+
+
 		local subtree = tree:add(medius_protocol, buffer(), "Medius Protocol Data")
-		
+
 		local rtid          = buffer(0, 1):uint()
 		local adjusted_rtid = rtid
 		local encrypted     = false
-		
+
 		-- Check if the packet is encrypted
 		if rtid >= 0x80 then
 			encrypted = true
 			adjusted_rtid = rtid - 0x80
 		end
-		
-		local offset        = 0
+
 		local rt_length     = buffer(1, 2):le_uint()
 		local hash_offset   = (encrypted and 4 or 0)
-		
+
 		if rt_length > (length - (1 + 2 + hash_offset)) then
 			return
 		end
-		
+
 		if encrypted then
 			adjusted_rtid = rtid - 0x80
 		end
-		
+
 		local rt_name = "UNKNOWN"
-		
+
 		if rtids[adjusted_rtid] ~= nil then
 			rt_name = rtids[adjusted_rtid].name
 		end
-		
+
 		-- This packet is potentially a fragment?
 		if rt_length ~= (length - (1 + 2 + hash_offset)) and not encrypted then
 			rt_name = rt_name .. "*"
 		end
-		
+
 		-- Set column info
 		pinfo.cols.protocol = medius_protocol.name
 		pinfo.cols.info = pinfo.src_port .. " → " .. pinfo.dst_port .. " [" .. rt_name .. "] "
-		
+
 		-- Set RT dissection info
 		subtree:add_le(medius_protocol_msg["type"], buffer(offset, 1), rt_name .. " (" .. string.format("0x%02x", adjusted_rtid) .. ")")
 		offset = offset + 1
-		
+
 		subtree:add_le(medius_protocol_msg["length"], buffer(offset, 2))
 		offset = offset + 2
-		
+
 		subtree:add(medius_protocol_msg["encrypted"], (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " >= " or " < ") .. "0x80)")
-		
+
 		-- TODO: parse multiple message frames in a single packet
-		
+
 		-- If the message is encrypted ...
 		if encrypted then
 			subtree:add_le(medius_protocol_msg["chksum"], buffer(offset, 4))
 			offset = offset + 4
-			
+
 			-- Show raw encrypted data
 			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
 		else
-			
+
 			--[[
 			for i, _ in pairs(rtids[rtid]) do
 				if i:match("struct_") ~= nil then
@@ -914,13 +1148,13 @@ local function init()
 					local medius_version_number = tonumber(i:split("struct_")[2])
 					local medius_version = tostring((medius_version_number * 1.00) / 100)
 					local total_struct_length = 0
-					
+
 					for j, _ in pairs(rtids[rtid][struct_name]) do
 						local struct = rtids[rtid][struct_name][j]
-						
+
 						if struct.optional ~= nil and struct.optional == true then
 							if total_struct_length == (length - offset) then
-								
+
 								local d_type = struct.type
 								local d_id = struct.id
 								local d_name = struct.name
@@ -929,7 +1163,7 @@ local function init()
 								local d_enum = struct.enum
 								local field = rtids[rtid].fields[struct_name.."."..d_id]
 								local displaytext = nil
-								
+
 								if d_enum ~= nil then
 									for k, _ in pairs(d_enum) do
 										if k == buffer(offset, d_length):le_uint() then
@@ -947,7 +1181,7 @@ local function init()
 										end
 									end
 								end
-								
+
 								if displaytext ~= nil then
 									subtree:add(field, buffer(offset, d_length), displaytext)
 								else
@@ -957,17 +1191,17 @@ local function init()
 										subtree:add(field, buffer(offset, d_length))
 									end
 								end
-								
+
 								offset = offset + d_length
-								
+
 								break
 							end
 						end
-						
+
 						total_struct_length = total_struct_length + struct.length
-						
+
 						if total_struct_length == (length - offset) then
-							
+
 							local d_type = struct.type
 							local d_id = struct.id
 							local d_name = struct.name
@@ -976,7 +1210,7 @@ local function init()
 							local d_enum = struct.enum
 							local field = rtids[rtid].fields[struct_name.."."..d_id]
 							local displaytext = nil
-							
+
 							if d_enum ~= nil then
 								for k, _ in pairs(d_enum) do
 									if k == buffer(offset, d_length):le_uint() then
@@ -994,7 +1228,7 @@ local function init()
 									end
 								end
 							end
-							
+
 							if displaytext ~= nil then
 								subtree:add(field, buffer(offset, d_length), displaytext)
 							else
@@ -1004,47 +1238,47 @@ local function init()
 									subtree:add(field, buffer(offset, d_length))
 								end
 							end
-							
+
 							offset = offset + d_length
-							
+
 							break
 						end
-						
+
 					end
-					
-					
-					
+
+
+
 				end
 			end
 			--]]
-			
-			
+
+
 			-- Just show raw data
 			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
-			
+
 			if rtids[adjusted_rtid] == nil then
 				return
 			end
-			
+
 			-- If this is an "APP" packet ...
 			if string.match(rtids[adjusted_rtid].name, "APP") then
-				
+
 				local appmsgtype = buffer(offset, 2):le_uint()
 				offset = offset + 2
-				
+
 				-- Show application data
 				local apptree = subtree:add(medius_protocol_msg["app"], buffer(offset-2), "Application Data")
-				
-				
+
+
 				-- FIXME: this doesn't need to be in a loop ... just grab it from mediustypes[appmsgtype]
 				for i, _ in pairs(mediustypes) do
 					if i == appmsgtype then
-						
+
 						-- Update info column string
 						pinfo.cols.info:append(mediustypes[i].name .. " ")
-						
+
 						apptree:add(medius_app_protocol["type"], buffer(offset-2, 2), mediustypes[i].name .. " (" .. string.format("0x%04x", i) .. ")")
-						
+
 						if mediustypes[i].struct ~= nil then
 							for j, _ in ipairs(mediustypes[i].struct) do
 								local object = mediustypes[i].struct[j]
@@ -1056,7 +1290,7 @@ local function init()
 								local d_enum = object.enum
 								local field = mediustypes[i].fields[d_id]
 								local displaytext = nil
-								
+
 								if d_enum ~= nil then
 									for k, _ in pairs(d_enum) do
 										if k == buffer(offset, d_length):le_uint() then
@@ -1074,7 +1308,7 @@ local function init()
 										end
 									end
 								end
-								
+
 								if displaytext ~= nil then
 									apptree:add(field, buffer(offset, d_length), displaytext)
 								else
@@ -1084,21 +1318,21 @@ local function init()
 										apptree:add(field, buffer(offset, d_length))
 									end
 								end
-								
+
 								offset = offset + d_length
 							end
 						end
-						
+
 						break
 					end
 				end
-				
-				
-				
+
+
+
 			end
 		end
 	end
-	
+
 	---------------------------------------------
 	-- Bindings
 	---------------------------------------------
@@ -1109,32 +1343,32 @@ local function init()
 	tcp_port:add(10071, medius_protocol) -- MUIS
 		tcp_port:add(20071, medius_protocol)
 		tcp_port:add(30071, medius_protocol)
-	
+
 	tcp_port:add(10075, medius_protocol) -- MAS
 		tcp_port:add(20075, medius_protocol)
 		tcp_port:add(30075, medius_protocol)
-	
+
 	tcp_port:add(10078, medius_protocol) -- MLS
 		tcp_port:add(20078, medius_protocol)
 		tcp_port:add(30078, medius_protocol)
-	
+
 	tcp_port:add(10079, medius_protocol) -- DME (TCP)
-	
+
 	udp_port:add(50000, medius_protocol) -- DME (UDP)
 		udp_port:add(50001, medius_protocol)
 		udp_port:add(50002, medius_protocol)
 		udp_port:add(50003, medius_protocol)
 		udp_port:add(51000, medius_protocol)
-	
+
 	--udp_port:add(10070, medius_nat_protocol) -- NAT
-	
+
 	-- Required in GUI
 	if gui_enabled() then
 		reload_packets()
 	end
-	
+
 	log("Initialized")
-	
+
 end
 
 local function show_agreement()
@@ -1143,9 +1377,9 @@ local function show_agreement()
 		os.exit(5)
 		return
 	end
-	
+
 	local mwd_usage_agree = false
-	
+
 	-- create new text window and initialize its text
 	local win = TextWindow.new("Medius Wireshark Dissector Usage Agreement")
 	win:set_editable(false)
@@ -1156,7 +1390,7 @@ local function show_agreement()
 	win:append(" - Wireshark Version: " .. get_version() .. "\n")
 	win:append(" - Lua Version: " .. _VERSION .. "\n")
 	win:append("\n")
-	
+
 	win:append("By using this dissector you agree to the following:\n")
 	win:append(" - Not be a dick and use this plugin against other Medius servers you do not own or are not authorized to reverse engineer.\n")
 	win:append(" - Abide by the license and usage agreement this plugin is distributed under.\n")
@@ -1179,74 +1413,73 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
 	win:add_button("Agree", function()
 		log("Usage agreement accepted!")
 		mwd_usage_agree = true
-		
+
 		local file = io.open(agreement_path, "w")
 		local current_date = tonumber(os.time(os.date("!*t")))
 		local path = get_current_path()
-		
+
 		file:write(plugin_info["version"] .. "\n")
 		file:write(current_date .. "\n")
 		file:write(path .. "\n")
-		
+
 		file:close()
-		
+
 		win:close()
 	end)
-	
+
 	win:add_button("Decline", function()
 		win:close()
 	end)
 
 	-- print "closing" to stdout when the user closes the text windw
 	win:set_atclose(function()
-		
+
 		if not mwd_usage_agree then
 			log("Usage agreement declined!")
 			os.exit(12)
 			return
 		end
-		
+
 		init()
 	end)
-	
+
 end
 
 local function check_agreement()
-	
+
 	if not file_exists(agreement_path) then
 		show_agreement()
 		return
 	end
-	
+
 	local file = io.open(agreement_path, "r")
 	local version = file:read()
 	local current_date = tonumber(os.time(os.date("!*t")))
 	local agreed_date = file:read()
 	local path = file:read()
 	file:close()
-	
+
 	log("Agreement file version: " .. tostring(version))
-	
+
 	if version == nil or agreed_date == nil or path == nil then
 		os.remove(agreement_path)
 		show_agreement()
 		return
 	end
-	
+
 	if not (tonumber(agreed_date) >= 1) then
 		os.remove(agreement_path)
 		show_agreement()
 		return
 	end
-	
+
 	if version ~= plugin_info["version"] or current_date > (agreed_date + (30 * (60 * 60 * 24))) or path ~= get_current_path() then
 		os.remove(agreement_path)
 		show_agreement()
 		return
 	end
-	
+
 	init()
 end
 
 check_agreement()
-
