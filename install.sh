@@ -7,9 +7,16 @@ cd $DIR
 SCRIPT="$0"
 DISSECTOR="medius_wireshark_dissector.lua"
 
-mkdir -p ~/.local/lib/wireshark/plugins  >/dev/null 2>&1
-rm ~/.local/lib/wireshark/plugins/${DISSECTOR} >/dev/null 2>&1
-cp ${DISSECTOR} ~/.local/lib/wireshark/plugins >/dev/null 2>&1
+if [ "$1" = "-u" ] || [ "$1" = "--uninstall" ]; then
+	rm -rf ~/.local/lib/wireshark/plugins/medius-wireshark >/dev/null 2>&1
+	echo -e "> Successfully uninstalled medius-wireshark plugin"
+	exit 0
+fi
 
-echo -e "> Installed ${DISSECTOR}"
+
+mkdir -p ~/.local/lib/wireshark/plugins/medius-wireshark >/dev/null 2>&1
+rm ~/.local/lib/wireshark/plugins/medius-wireshark/${DISSECTOR} >/dev/null 2>&1
+cp ${DISSECTOR} ~/.local/lib/wireshark/plugins/medius-wireshark >/dev/null 2>&1
+
+echo -e "> Successfully installed medius-wireshark plugin"
 

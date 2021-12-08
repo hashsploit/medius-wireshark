@@ -62,3 +62,7 @@ Rather than running as root or admin, try
 [enabling capture privileges](http://wiki.wireshark.org/CaptureSetup/CapturePrivileges)
 for the user running Wireshark.
 
+## Uninstall
+
+To uninstall the plugin, simply delete the `medius-wireshark` plugin folder or if you are on Mac or Linux run `./install.sh --uninstall`.
+
