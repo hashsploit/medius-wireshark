@@ -894,7 +894,7 @@ local function init()
 		subtree:add_le(medius_protocol_msg["length"], buffer(offset, 2))
 		offset = offset + 2
 		
-		subtree:add(medius_protocol_msg["encrypted"], (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " > " or " < ") .. "0x80)")
+		subtree:add(medius_protocol_msg["encrypted"], (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " >= " or " < ") .. "0x80)")
 		
 		-- TODO: parse multiple message frames in a single packet
 		
