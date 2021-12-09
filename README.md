@@ -11,8 +11,7 @@ Verified working on:
 - **Linux** Wireshark Version 3.2.3 (Git v3.2.3 packaged as 3.2.3-1)
 - **Mac OS X** Wireshark Version 3.4.9 (v3.4.9-0-g365e236f5efe)
 - **Windows 7** Version 3.4.10 (v3.4.10-0-g733b3a137c2b)
-- **Windows 10** Version 10.0.19043.1387 (v3.4.10-0-g733b3a137c2b)
-Note- For Win10 users, make sure to Run as Admin on Wireshark to properly accept the agreement!
+- **Windows 10** Version 10.0.19043.1387 (v3.4.10-0-g733b3a137c2b) Note- For Win10 users, if you have your Wireshark Plugins directory mounted to a different drive make sure to Run as Adminstrator on Wireshark to properly accept the agreement!
 
 ## Requirements
 
