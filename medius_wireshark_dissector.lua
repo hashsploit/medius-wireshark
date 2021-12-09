@@ -1455,7 +1455,8 @@ local function init()
 		tcp_port:add(30078, medius_protocol)
 
 	tcp_port:add(10079, medius_protocol) -- DME (TCP)
-
+	tcp_port:add(10073, medius_protocol) -- DME (TCP) PS3
+	
 	udp_port:add(50000, medius_protocol) -- DME (UDP)
 		udp_port:add(50001, medius_protocol)
 		udp_port:add(50002, medius_protocol)
