@@ -16,6 +16,8 @@ const.NET_ADDRESS_LIST_COUNT = 2 -- This macro determines the number of addresse
 const.NET_SESSION_KEY_LEN = 17 -- This macro determines the length of a session key as used in ConnectionInfo (includes NULL terminator).
 const.NET_ACCESS_KEY_LEN = 17 -- This macro determines the length of an access key as used in ConnectionInfo (includes NULL terminator).
 const.DNASSIGNATURE_MAXLEN = 32
+const.ACCOUNTNAME_MAXLEN = 32
+const.PASSWORD_MAXLEN = 32
 
 local MediusPolicyType = {
 	[0] = {name="Usage", desc="Usage policy."},
@@ -404,7 +406,39 @@ local mediustypes = {
 	},
 	[0x0501] = {name="SessionEnd"},
 	[0x0601] = {name="SessionEndResponse"},
-	[0x0701] = {name="AccountLogin"},
+	[0x0701] = {
+		name = "AccountLogin",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "string",
+				id = "account_name",
+				name = "Account Name",
+				length = const.ACCOUNTNAME_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "string",
+				id = "password",
+				name = "Password",
+				length = const.PASSWORD_MAXLEN,
+				display = base.NONE
+			}
+		}
+	},
 	[0x0801] = {name="AccountLoginResponse"},
 	[0x0901] = {name="AccountRegistration"},
 	[0x0A01] = {name="AccountRegistrationResponse"},
@@ -836,7 +870,7 @@ local mediustypes = {
 			},
 			{
 				type = "bytes",
-				id = "dnas_signature_length",
+				id = "dnas_signature",
 				name = "DNAS Signature",
 				length = const.DNASSIGNATURE_MAXLEN,
 				display = base.NONE
@@ -913,7 +947,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.3.1",
+	version = "1.4.0",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
@@ -1070,56 +1104,23 @@ local function init()
 	-- Dissector
 	---------------------------------------------
 
-	medius_protocol.dissector = function(buffer, pinfo, tree)
-		local length = buffer:len()
-		local medius_protocol_msg = medius_protocol_msg
+	local processMessage = function(buffer, pinfo, tree, rtInfo)
 
-		if length < 3 then
-			return
-		end
+		local offset        = rtInfo["offset"]
+		local rt_length     = rtInfo["rt_length"]
+		local rtid          = rtInfo["rtid"]
+		local adjusted_rtid = rtInfo["adjusted_rtid"]
+		local encrypted     = rtInfo["encrypted"]
+		local hash_offset   = rtInfo["hash_offset"]
 
-		local offset = 0
-
-
-
-
-		local subtree = tree:add(medius_protocol, buffer(), "Medius Protocol Data")
-
-		local rtid          = buffer(0, 1):uint()
-		local adjusted_rtid = rtid
-		local encrypted     = false
-
-		-- Check if the packet is encrypted
-		if rtid >= 0x80 then
-			encrypted = true
-			adjusted_rtid = rtid - 0x80
-		end
-
-		local rt_length     = buffer(1, 2):le_uint()
-		local hash_offset   = (encrypted and 4 or 0)
-
-		if rt_length > (length - (1 + 2 + hash_offset)) then
-			return
-		end
-
-		if encrypted then
-			adjusted_rtid = rtid - 0x80
-		end
-
+		local subtree = tree:add(medius_protocol, buffer(offset, rt_length + 3), "Medius Protocol Data")
 		local rt_name = "UNKNOWN"
 
 		if rtids[adjusted_rtid] ~= nil then
 			rt_name = rtids[adjusted_rtid].name
 		end
 
-		-- This packet is potentially a fragment?
-		if rt_length ~= (length - (1 + 2 + hash_offset)) and not encrypted then
-			rt_name = rt_name .. "*"
-		end
-
-		-- Set column info
-		pinfo.cols.protocol = medius_protocol.name
-		pinfo.cols.info = pinfo.src_port .. " → " .. pinfo.dst_port .. " [" .. rt_name .. "] "
+		pinfo.cols.info:append(rt_name)
 
 		-- Set RT dissection info
 		subtree:add_le(medius_protocol_msg["type"], buffer(offset, 1), rt_name .. " (" .. string.format("0x%02x", adjusted_rtid) .. ")")
@@ -1138,7 +1139,7 @@ local function init()
 			offset = offset + 4
 
 			-- Show raw encrypted data
-			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
+			subtree:add_le(medius_protocol_msg["data"], buffer(offset, rt_length))
 		else
 
 			--[[
@@ -1254,7 +1255,7 @@ local function init()
 
 
 			-- Just show raw data
-			subtree:add_le(medius_protocol_msg["data"], buffer(offset, length - offset))
+			subtree:add_le(medius_protocol_msg["data"], buffer(offset, rt_length))
 
 			if rtids[adjusted_rtid] == nil then
 				return
@@ -1267,15 +1268,15 @@ local function init()
 				offset = offset + 2
 
 				-- Show application data
-				local apptree = subtree:add(medius_protocol_msg["app"], buffer(offset-2), "Application Data")
+				local apptree = subtree:add(medius_protocol_msg["app"], buffer(offset-2, rt_length), "Application Data")
 
 
 				-- FIXME: this doesn't need to be in a loop ... just grab it from mediustypes[appmsgtype]
 				for i, _ in pairs(mediustypes) do
 					if i == appmsgtype then
 
-						-- Update info column string
-						pinfo.cols.info:append(mediustypes[i].name .. " ")
+						-- Append Medius type string to info column
+						pinfo.cols.info:append("("..mediustypes[i].name .. ")")
 
 						apptree:add(medius_app_protocol["type"], buffer(offset-2, 2), mediustypes[i].name .. " (" .. string.format("0x%04x", i) .. ")")
 
@@ -1328,10 +1329,105 @@ local function init()
 				end
 
 
-
 			end
 		end
 	end
+
+	local mediusFramer = function(buffer, pinfo, tree)
+		local length = buffer:len()
+		local medius_protocol_msg = medius_protocol_msg
+
+		if length < 3 then
+			return
+		end
+
+		-- Packet framing/defragmentation
+		-- As there can be multiple "messages" inside a single packet
+		local offset        = 0
+		local rt_length     = buffer(offset+1, 2):le_uint()
+		local rtid          = buffer(offset, 1):uint()
+		local adjusted_rtid = rtid
+		local encrypted     = false
+		local hash_offset   = 0
+
+		-- Check if the message is encrypted
+		if rtid >= 0x80 then
+			encrypted = true
+			adjusted_rtid = rtid - 0x80
+			hash_offset = 4
+		end
+
+		-- Not a Medius packet
+		if rt_length > (length - (1 + 2 + hash_offset)) then
+			return
+		end
+
+		-- Set column info
+		pinfo.cols.protocol = medius_protocol.name
+		pinfo.cols.info:set(pinfo.src_port .. " → " .. pinfo.dst_port .. " [")
+
+		local rtInfo = {
+			offset = offset,
+			rt_length = rt_length,
+			rtid = rtid,
+			adjusted_rtid = adjusted_rtid,
+			encrypted = encrypted,
+			hash_offset = hash_offset
+		}
+
+		-- This packet contains multiple messages ...
+		if rt_length < (length - (1 + 2 + hash_offset)) then
+
+			while offset < length do
+				rtid          = buffer(offset, 1):uint()
+				rt_length     = buffer(offset+1, 2):le_uint()
+				adjusted_rtid = rtid
+				encrypted     = false
+				hash_offset   = 0
+
+				if rt_length <= 0 then
+					break
+				end
+
+				-- Check if the message is encrypted
+				if rtid >= 0x80 then
+					encrypted = true
+					adjusted_rtid = rtid - 0x80
+					hash_offset = 4
+				end
+
+				rtInfo["offset"] = offset
+				rtInfo["rt_length"] = rt_length
+				rtInfo["rtid"] = rtid
+				rtInfo["adjusted_rtid"] = adjusted_rtid
+				rtInfo["encrypted"] = encrypted
+				rtInfo["hash_offset"] = hash_offset
+
+				offset = offset + 1 + 2 + hash_offset
+
+				local status, msg = pcall(processMessage, buffer, pinfo, tree, rtInfo)
+
+				if not status then
+					pinfo.cols.info:append("ERROR")
+					log("Error parsing packet #" .. pinfo.number .. ": " .. msg)
+					log("Pkt #=" .. pinfo.number .. " rtid=" .. string.format("0x%02x", rtid) .. " rt_length=" .. rt_length .. " offset=" .. offset)
+				end
+
+				pinfo.cols.info:append(", ")
+
+				offset = offset + rt_length
+			end
+
+			pinfo.cols.info:set(tostring(pinfo.cols.info):sub(1, #tostring(pinfo.cols.info)-2))
+		else
+			processMessage(buffer, pinfo, tree, rtInfo)
+		end
+
+		pinfo.cols.info:append("]")
+
+	end
+
+	medius_protocol.dissector = mediusFramer
 
 	---------------------------------------------
 	-- Bindings
