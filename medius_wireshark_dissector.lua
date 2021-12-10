@@ -1527,6 +1527,12 @@ local function init()
 		tcp_port:add(20071, medius_protocol)
 		tcp_port:add(30071, medius_protocol)
 
+	tcp_port:add(10073, medius_protocol) -- MAPS Retail
+		udp_port:add(10074, medius_protocol) -- MAPS Retail Socom 4
+		udp_port:add(10072, medius_protocol) -- MAPS Retail MAG
+		tcp_port:add(10471, medius_protocol) -- MAG Dev 3
+		tcp_port:add(10571, medius_protocol) -- Socom 4 Dev 3
+
 	tcp_port:add(10075, medius_protocol) -- MAS
 		tcp_port:add(20075, medius_protocol)
 		tcp_port:add(30075, medius_protocol)
@@ -1536,7 +1542,8 @@ local function init()
 		tcp_port:add(30078, medius_protocol)
 
 	tcp_port:add(10079, medius_protocol) -- DME (TCP)
-
+	tcp_port:add(10073, medius_protocol) -- DME (TCP) PS3
+	
 	udp_port:add(50000, medius_protocol) -- DME (UDP)
 		udp_port:add(50001, medius_protocol)
 		udp_port:add(50002, medius_protocol)
