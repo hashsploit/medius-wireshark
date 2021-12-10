@@ -1,6 +1,6 @@
 -- Medius Wireshark Packet Dissector
 -- Written by hashsploit <hashsploit@protonmail.com>
--- Ref: https://wiki.hashsploit.net/PlayStation_2#Medius
+-- Ref: https://wiki.hashsploit.net/PlayStation_2#Medius and https://wiki.hashsploit.net/PlayStation_3#Medius
 
 ---------------------------------------------
 -- Constants & Enums
@@ -136,6 +136,21 @@ local ApplicationId = {
 	}
 	-- TODO: add more
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ---------------------------------------------
 -- RTime ID's
@@ -299,6 +314,24 @@ local rtids = {
 	[0x3d] = {name="RT_MSG_CLIENT_APP_TO_PLUGIN", desc="Zipper Interactive Games Only."},
 	[0x3e] = {name="RT_MSG_SERVER_PLUGIN_TO_APP", desc="Zipper Interactive Games Only."}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ---------------------------------------------
 -- Medius Types
@@ -1029,6 +1062,49 @@ local mediustypes = {
 	[0x0075] = {name="CreateClan2"}
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ---------------------------------------------
 -- Core
 ---------------------------------------------
@@ -1217,8 +1293,6 @@ local function init()
 		offset = offset + 2
 
 		subtree:add(medius_protocol_msg["encrypted"], (encrypted and "true" or "false") .. " (" .. string.format("0x%02x", rtid) .. (encrypted and " >= " or " < ") .. "0x80)")
-
-		-- TODO: parse multiple message frames in a single packet
 
 		-- If the message is encrypted ...
 		if encrypted then
@@ -1543,7 +1617,7 @@ local function init()
 
 	tcp_port:add(10079, medius_protocol) -- DME (TCP)
 	tcp_port:add(10073, medius_protocol) -- DME (TCP) PS3
-	
+
 	udp_port:add(50000, medius_protocol) -- DME (UDP)
 		udp_port:add(50001, medius_protocol)
 		udp_port:add(50002, medius_protocol)
