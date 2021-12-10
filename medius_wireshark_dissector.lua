@@ -10,6 +10,7 @@ local const = {}
 const.MESSAGEID_MAXLEN = 21
 const.POLICY_MAXLEN = 256
 const.SESSIONKEY_MAXLEN = 17
+const.ACCESSKEY_MAXLEN = 17
 const.NET_MAX_IP_LENGTH = 16 -- This macro defines the length of an IP address string including the null terminator.
 const.NET_MAX_ADDRESS_STR_LENGTH = 18 -- This macro defines the maximum length of an IP address (16 bytes) or MAC Address (18 bytes) (including the null terminator).
 const.NET_ADDRESS_LIST_COUNT = 2 -- This macro determines the number of addresses in an address list.
@@ -18,6 +19,7 @@ const.NET_ACCESS_KEY_LEN = 17 -- This macro determines the length of an access k
 const.DNASSIGNATURE_MAXLEN = 32
 const.ACCOUNTNAME_MAXLEN = 32
 const.PASSWORD_MAXLEN = 32
+const.RSAKEY_MAXLEN = 64
 
 local MediusPolicyType = {
 	[0] = {name="Usage", desc="Usage policy."},
@@ -75,6 +77,11 @@ local MediusDnasCategory = {
 	[0] = {name="CONSOLE_ID", desc="DNAS Console ID."},
 	[1] = {name="TITLE_ID", desc="DNAS Title ID."},
 	[2] = {name="DISK_ID", desc="DNAS Disk Id."}
+}
+
+local MediusAccountType = {
+	[0] = {name="CHILD_ACCOUNT", desc="Child account type."},
+	[1] = {name="MASTER_ACCOUNT", desc="Master account type."}
 }
 
 local ApplicationId = {
@@ -142,7 +149,7 @@ local rtids = {
 			{
 				type = "bytes",
 				id = "padding",
-				name = "Unknown (Padding?)",
+				name = "Padding",
 				length = 3,
 				display = base.SPACE
 			},
@@ -165,14 +172,14 @@ local rtids = {
 				type = "bytes",
 				id = "rsa_key",
 				name = "RSA Key",
-				length = 64,
+				length = const.RSAKEY_MAXLEN,
 				display = base.SPACE
 			},
 			{
 				type = "bytes",
 				id = "session_key",
 				name = "Session Key",
-				length = 17,
+				length = const.SESSIONKEY_MAXLEN,
 				display = base.SPACE,
 				optional = true
 			},
@@ -180,7 +187,7 @@ local rtids = {
 				type = "bytes",
 				id = "access_key",
 				name = "Access Key",
-				length = 17,
+				length = const.ACCESSKEY_MAXLEN,
 				display = base.SPACE,
 				optional = true
 			}
@@ -205,14 +212,14 @@ local rtids = {
 				type = "bytes",
 				id = "rsa_key",
 				name = "RSA Key",
-				length = 64,
+				length = const.RSAKEY_MAXLEN,
 				display = base.SPACE
 			},
 			{
 				type = "bytes",
 				id = "session_key",
 				name = "Session Key",
-				length = 17,
+				length = const.SESSIONKEY_MAXLEN,
 				display = base.SPACE,
 				optional = true
 			},
@@ -220,7 +227,7 @@ local rtids = {
 				type = "bytes",
 				id = "access_key",
 				name = "Access Key",
-				length = 17,
+				length = const.ACCESSKEY_MAXLEN,
 				display = base.SPACE,
 				optional = true
 			}
@@ -439,7 +446,87 @@ local mediustypes = {
 			}
 		}
 	},
-	[0x0801] = {name="AccountLoginResponse"},
+	[0x0801] = {
+		name = "AccountLoginResponse",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "callback_status",
+				name = "Callback Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCallbackStatus
+			},
+			{
+				type = "uint8",
+				id = "account_id",
+				name = "Account ID",
+				length = 4,
+				display = base.DEC_HEX
+			}
+			-- This is where the clusterfuck begins ...
+			-- TODO This will require `struct_#rtver#`` structures, and generic `struct` to be parsed.
+			--[[
+			{
+				type = "uint8",
+				id = "account_type",
+				name = "Account Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusAccountType
+			},
+			{
+				type = "uint8",
+				id = "world_id",
+				name = "World ID",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "bytes",
+				id = "access_key",
+				name = "Access Key",
+				length = const.ACCESSKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "rsa_key",
+				name = "RSA Key",
+				length = const.RSAKEY_MAXLEN,
+				display = base.SPACE
+			},
+			{
+				type = "string",
+				id = "address_one",
+				name = "RSA Key",
+				length = const.RSAKEY_MAXLEN,
+				display = base.SPACE
+			},
+			--]]
+		}
+	},
 	[0x0901] = {name="AccountRegistration"},
 	[0x0A01] = {name="AccountRegistrationResponse"},
 	[0x0B01] = {name="AccountGetProfile"},
@@ -947,7 +1034,7 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.4.0",
+	version = "1.4.2",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
 }
