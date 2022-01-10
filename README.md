@@ -13,6 +13,12 @@ Verified working on:
 - **Windows 7** Version 3.4.10 (v3.4.10-0-g733b3a137c2b)
 - **Windows 10** Version 10.0.19043.1387 (v3.4.10-0-g733b3a137c2b) Note- For Win10 users, if you have your Wireshark Plugins directory mounted to a different drive make sure to Run as Adminstrator on Wireshark to properly accept the agreement!
 
+## Settings
+
+You can enable `Expert Info` under `Tools` > `Medius Wireshark Dissector` > `Toggle Expert Info`.
+
+You can also access the PlayStation 2 and PlayStation 3 reverse engineering wiki's directly from the toolbar: `Tools` > `Medius Wireshark Dissector` > `Wiki` ...
+
 ## Requirements
 
 The Medius Wireshark Dissector plugin requires Wireshark version 1.4 or newer. The 

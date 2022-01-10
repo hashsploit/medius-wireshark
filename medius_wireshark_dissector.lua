@@ -20,6 +20,10 @@ const.DNASSIGNATURE_MAXLEN = 32
 const.ACCOUNTNAME_MAXLEN = 32
 const.PASSWORD_MAXLEN = 32
 const.RSAKEY_MAXLEN = 64
+const.CLANNAME_MAXLEN = 32
+const.CLANSTATS_MAXLEN = 256
+const.ACCOUNTSTATS_MAXLEN = 256
+const.LADDERSTATSWIDE_MAXLEN = 100
 
 local MediusPolicyType = {
 	[0] = {name="Usage", desc="Usage policy."},
@@ -82,6 +86,22 @@ local MediusDnasCategory = {
 local MediusAccountType = {
 	[0] = {name="CHILD_ACCOUNT", desc="Child account type."},
 	[1] = {name="MASTER_ACCOUNT", desc="Master account type."}
+}
+
+local MediusUserAction = {
+	[0] = {name="KEEP_ALIVE", desc="(DEPRECATED) Used to denote that the player is still online."},
+	[1] = {name="JOINED_CHAT_WORLD", desc="Sent when a player joins a chat world."},
+	[2] = {name="LEFT_GAME_WORLD", desc="Sent when a player leaves a game world."}
+}
+
+local MediusClanStatus = {
+	[0] = {name="CLAN_ACTIVE", desc="The clan is active."},
+	[-1] = {name="CLAN_DISPANDED", desc="The clan has been disbanded."}
+}
+
+local MediusLadderType = {
+	[0] = {name="LADDER_TYPE_PLAYER", desc="Applies request to player ladders."},
+	[1] = {name="LADDER_TYPE_CLAN", desc="Applies request to clan ladders."}
 }
 
 local ApplicationId = {
@@ -181,14 +201,24 @@ local rtids = {
 				name = "App Id",
 				length = 4,
 				display = base.DEC_HEX,
-				enum = ApplicationId
+				enum = ApplicationId,
+				expert_info = {
+					text = "This value is unique per game title.",
+					group = expert.group.COMMENTS_GROUP,
+					severity = expert.severity.NOTE
+				}
 			},
 			{
 				type = "bytes",
 				id = "rsa_key",
 				name = "RSA Key",
 				length = const.RSAKEY_MAXLEN,
-				display = base.SPACE
+				display = base.SPACE,
+				expert_info = {
+					text = "64-bit RSA key.\nIf this key is nulled out then encryption will be disabled.",
+					group = expert.group.COMMENTS_GROUP,
+					severity = expert.severity.COMMENT
+				}
 			},
 			{
 				type = "bytes",
@@ -221,14 +251,24 @@ local rtids = {
 				name = "App Id",
 				length = 4,
 				display = base.DEC_HEX,
-				enum = ApplicationId
+				enum = ApplicationId,
+				expert_info = {
+					text = "This value is unique per game title.",
+					group = expert.group.COMMENTS_GROUP,
+					severity = expert.severity.NOTE
+				}
 			},
 			{
 				type = "bytes",
 				id = "rsa_key",
 				name = "RSA Key",
 				length = const.RSAKEY_MAXLEN,
-				display = base.SPACE
+				display = base.SPACE,
+				expert_info = {
+					text = "64-bit RSA key.\nIf this key is nulled out then encryption will be disabled.",
+					group = expert.group.COMMENTS_GROUP,
+					severity = expert.severity.COMMENT
+				}
 			},
 			{
 				type = "bytes",
@@ -507,7 +547,7 @@ local mediustypes = {
 			{
 				type = "uint8",
 				id = "account_id",
-				name = "Account ID",
+				name = "Account Id",
 				length = 4,
 				display = base.DEC_HEX
 			}
@@ -567,7 +607,32 @@ local mediustypes = {
 	[0x0D01] = {name="AccountUpdateProfile"},
 	[0x0E01] = {name="AccountUpdateProfileResponse"},
 	[0x0F01] = {name="AccountUpdatePassword"},
-	[0x1101] = {name="AccountUpdateStats"},
+	[0x1101] = {
+		name = "AccountUpdateStats",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "account_stats",
+				name = "Account Stats",
+				length = const.ACCOUNTSTATS_MAXLEN,
+				display = base.SPACE
+			}
+		}
+	},
 	[0x1201] = {name="AccountUpdateStatsResponse"},
 	[0x1301] = {name="AccountDelete"},
 	[0x1401] = {name="AccountDeleteResponse"},
@@ -696,7 +761,33 @@ local mediustypes = {
 			}
 		}
 	},
-	[0x4901] = {name="UpdateUserState"},
+	[0x4901] = {
+		name = "UpdateUserState",
+		struct = {
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "user_action",
+				name = "User Action",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusUserAction
+			}
+		}
+	},
 	[0x4A01] = {name="ErrorMessage"},
 	[0x4B01] = {name="GetAnnouncements"},
 	[0x4C01] = {name="GetAllAnnouncements"},
@@ -747,8 +838,131 @@ local mediustypes = {
 	[0x7901] = {name="GetClanTeamChallengeHistoryResponse"},
 	[0x7A01] = {name="GetClanInvitationsSent"},
 	[0x7B01] = {name="GetClanInvitationsSentResponse"},
-	[0x7C01] = {name="GetMyClans"},
-	[0x7D01] = {name="GetMyClansResponse"},
+	[0x7C01] = {
+		name = "GetMyClans",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "session_key",
+				name = "Session Key",
+				length = const.SESSIONKEY_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 2,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "starting_page",
+				name = "Starting Page",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "uint8",
+				id = "page_size",
+				name = "Page Size",
+				length = 4,
+				display = base.DEC_HEX
+			}
+		}
+	},
+	[0x7D01] = {
+		name = "GetMyClansResponse",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "callback_status",
+				name = "Callback Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCallbackStatus
+			},
+			{
+				type = "uint8",
+				id = "clan_id",
+				name = "Clan Id",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "uint8",
+				id = "app_id",
+				name = "App Id",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = ApplicationId
+			},
+			{
+				type = "string",
+				id = "clan_name",
+				name = "Clan Name",
+				length = const.CLANNAME_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "uint8",
+				id = "leader_account_id",
+				name = "Leader Account Id",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "string",
+				id = "leader_account_name",
+				name = "Leader Account Name",
+				length = const.ACCOUNTNAME_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "clan_stats",
+				name = "Clan Stats",
+				length = const.CLANSTATS_MAXLEN,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "clan_status",
+				name = "Clan Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusClanStatus
+			},
+			{
+				type = "bool",
+				id = "end_of_message",
+				name = "End of Message",
+				length = 4,
+				display = base.BOOLEAN
+			}
+		}
+	},
 	[0x7E01] = {name="GetAllClanMessages"},
 	[0x7F01] = {name="GetAllClanMessagesResponse"},
 	[0x8001] = {name="ConfirmClanTeamChallenge"},
@@ -1006,8 +1220,82 @@ local mediustypes = {
 	},
 	[0x0B04] = {name="UpdateLadderStatsWide"},
 	[0x0C04] = {name="UpdateLadderStatsWideResponse"},
-	[0x0D04] = {name="GetLadderStatsWide"},
-	[0x0E04] = {name="GetLadderStatsWideResponse"},
+	[0x0D04] = {
+		name = "GetLadderStatsWide",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "account_id_or_clan_id",
+				name = "Account Id or Clan Id",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "uint8",
+				id = "ladder_type",
+				name = "Ladder Type",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusLadderType
+			}
+		}
+	},
+	[0x0E04] = {
+		name = "GetLadderStatsWideResponse",
+		desc = "Response from server with list of integer stats used for calculating ladder rankings. Callback Status can be: MediusPlayerNotPrivileged, MediusSuccess MediusWMError, MediusInvalidRequestMsg, MediusDBError",
+		struct = {
+			{
+				type = "bytes",
+				id = "message_id",
+				name = "Message Id",
+				length = const.MESSAGEID_MAXLEN,
+				display = base.NONE
+			},
+			{
+				type = "bytes",
+				id = "padding",
+				name = "Padding",
+				length = 3,
+				display = base.SPACE
+			},
+			{
+				type = "uint8",
+				id = "callback_status",
+				name = "Callback Status",
+				length = 4,
+				display = base.DEC_HEX,
+				enum = MediusCallbackStatus
+			},
+			{
+				type = "uint8",
+				id = "account_id_or_clan_id",
+				name = "Account Id or Clan Id",
+				length = 4,
+				display = base.DEC_HEX
+			},
+			{
+				type = "bytes",
+				id = "ladder_type",
+				name = "Ladder Type",
+				length = const.LADDERSTATSWIDE_MAXLEN,
+				display = base.SPACE
+			}
+		}
+	},
 	[0x0F04] = {name="LadderList_ExtraInfo"},
 	[0x1004] = {name="UtilEventMsgHandler"},
 	[0x1104] = {name="UniverseVariableInformationResponse"},
@@ -1110,9 +1398,15 @@ local mediustypes = {
 ---------------------------------------------
 
 local plugin_info = {
-	version = "1.4.2",
+	version = "1.5.0",
 	author = "hashsploit",
 	repository = "https://github.com/hashsploit/medius-wireshark"
+}
+
+local mwd_usage_agree = false
+
+local mwd_settings = {
+	enable_expert_info = false
 }
 
 function string:split(delimiter)
@@ -1173,6 +1467,7 @@ log("Initializing (stage 1) ...")
 
 local medius_protocol = Proto("medius",  "Medius Protocol")
 medius_protocol.fields = {}
+medius_protocol.experts = {}
 
 local medius_protocol_msg = {}
 medius_protocol_msg["type"] = ProtoField.string("medius.type", "Message Type", base.NONE)
@@ -1209,9 +1504,14 @@ for i, _ in pairs(rtids) do
 				local d_display = object.display or base.NONE
 				local d_enum = object.enum
 				local d_optional = object.optional
+				local d_expert_info = object.expert_info
 
 				if rtids[i].fields == nil then
 					rtids[i].fields = {}
+				end
+				
+				if rtids[i].experts == nil then
+					rtids[i].experts = {}
 				end
 
 				if d_enum ~= nil then
@@ -1220,9 +1520,21 @@ for i, _ in pairs(rtids) do
 				end
 
 				local fulldomain = "medius.pkt." .. rtids[i].name .. "." .. j .."." .. d_id
+				
+				-- Add expert info if applicable
+				if d_expert_info and type(d_expert_info) == "table" then
+					local e_text = d_expert_info.text
+					local e_group = d_expert_info.group or expert.group.COMMENTS_GROUP
+					local e_severity = d_expert_info.severity or expert.severity.COMMENT
+					
+					rtids[i].experts[j .. "." .. d_id] = ProtoExpert.new(fulldomain, e_text, e_group, e_severity)
+				end
+				
 
 				rtids[i].fields[j .. "." .. d_id] = ProtoField[d_type](fulldomain, d_name, d_display)
+				
 				table.insert(medius_protocol.fields, rtids[i].fields[j.."."..d_id])
+				table.insert(medius_protocol.experts, rtids[i].experts[j.."."..d_id])
 
 			end
 
@@ -1302,124 +1614,161 @@ local function init()
 			-- Show raw encrypted data
 			subtree:add_le(medius_protocol_msg["data"], buffer(offset, rt_length))
 		else
-
-			--[[
-			for i, _ in pairs(rtids[rtid]) do
+			
+			
+			if rtids[adjusted_rtid] == nil then
+				log("Unknown RT ID: " .. adjusted_rtid)
+				return
+			end
+			
+			local found_rt_struct = false
+			for i, _ in pairs(rtids[adjusted_rtid]) do
 				if i:match("struct_") ~= nil then
 					local struct_name = i
-					local medius_version_number = tonumber(i:split("struct_")[2])
-					local medius_version = tostring((medius_version_number * 1.00) / 100)
+					local struct = rtids[adjusted_rtid][struct_name]
+					local medius_version_number = tonumber(struct_name:split("struct_")[2])
+					local medius_version = string.format("%.02f", tostring((medius_version_number * 1.00) / 100))
 					local total_struct_length = 0
+					local optionals = {}
+					local optionals_total_length = 0
+					
+					-- Set the structure length
+					for j, _ in pairs(struct) do
+						total_struct_length = total_struct_length + struct[j].length
+						
+						if struct[j].optional ~= nil then
+							table.insert(optionals, struct[j])
+							optionals_total_length = optionals_total_length + struct[j].length
+						end
+					end
+					
+					local test_struct_total_length = total_struct_length
+					local optional_length_expected = rt_length - (total_struct_length - optionals_total_length)
+					
+					if optional_length_expected >= 0 then
+						
+						-- TODO this should actually search for permutations, for now it just iterates backwards through the optional fields in the struct
+						for j=#optionals, 1, -1 do
+							local length = optionals[j].length
+							
+							if test_struct_total_length == rt_length or (test_struct_total_length-length) == rt_length then
+								pinfo.cols.info:append("<" .. medius_version .. ">")
+								found_rt_struct = true
+								
+								-- Now go through each structure and print the value
+								for k, _ in pairs(struct) do
+									-- START
+									local object = struct[k]
+									local d_type = object.type
+									local d_id = object.id
+									local d_name = object.name
+									local d_length = object.length
+									local d_display = object.display or base.NONE
+									local d_enum = object.enum
+									local d_optional = object.optional
+									local d_expert_info = object.expert_info
+									
+									local field = rtids[adjusted_rtid].fields[struct_name.."."..d_id]
+									local displaytext = nil
 
-					for j, _ in pairs(rtids[rtid][struct_name]) do
-						local struct = rtids[rtid][struct_name][j]
-
-						if struct.optional ~= nil and struct.optional == true then
-							if total_struct_length == (length - offset) then
-
-								local d_type = struct.type
-								local d_id = struct.id
-								local d_name = struct.name
-								local d_length = struct.length
-								local d_display = struct.display or base.NONE
-								local d_enum = struct.enum
-								local field = rtids[rtid].fields[struct_name.."."..d_id]
-								local displaytext = nil
-
-								if d_enum ~= nil then
-									for k, _ in pairs(d_enum) do
-										if k == buffer(offset, d_length):le_uint() then
-											local hexlen = tostring(d_length)
-											if d_length <= 9 then
-												hexlen = "0" .. tostring(d_length)
+									if d_enum ~= nil then
+										for k, _ in pairs(d_enum) do
+											if k == buffer(offset, d_length):le_uint() then
+												local hexlen = tostring(d_length)
+												if d_length <= 9 then
+													hexlen = "0" .. tostring(d_length)
+												end
+												if d_length <= 99 then
+													hexlen = "00" .. tostring(d_length)
+												end
+												if d_length <= 999 then
+													hexlen = "000" .. tostring(d_length)
+												end
+												displaytext = d_enum[k].name .. " (" .. k .. ") (" .. string.format("0x%" .. hexlen .. "x", k) .. ")"
 											end
-											if d_length <= 99 then
-												hexlen = "00" .. tostring(d_length)
-											end
-											if d_length <= 999 then
-												hexlen = "000" .. tostring(d_length)
-											end
-											displaytext = d_enum[k].name .. " (" .. k .. ") (" .. string.format("0x%" .. hexlen .. "x", k) .. ")"
+										end
+										
+										-- Value is not in enum
+										if displaytext == nil then
+											local value = buffer(offset, d_length):le_uint()
+											displaytext = value .. string.format(" (0x%08x)", value)
 										end
 									end
-								end
-
-								if displaytext ~= nil then
-									subtree:add(field, buffer(offset, d_length), displaytext)
-								else
-									if d_type == "uint8" or d_type == "uint16" or d_type == "uint32" then
-										subtree:add_le(field, buffer(offset, d_length))
-									else
-										subtree:add(field, buffer(offset, d_length))
+									
+									
+									-- Check if this struct field is being used
+									if offset > rt_length then
+										displaytext = d_name .. ": <MISSING> (" .. d_length .. " bytes)"
 									end
+
+									if displaytext ~= nil then
+										if offset > rt_length then
+											subtree:add(field, 0, displaytext)
+										else
+											subtree:add(field, buffer(offset, d_length), displaytext)
+										end
+									else
+										if d_type == "uint8" or d_type == "uint16" or d_type == "uint32" then
+											subtree:add_le(field, buffer(offset, d_length))
+										else
+											if field ~= nil then
+												subtree:add(field, buffer(offset, d_length))
+											end
+										end
+									end
+									
+									if d_expert_info and type(d_expert_info) == "table" and offset <= rt_length and mwd_settings.enable_expert_info then
+										local e_text = d_expert_info.text or ""
+										local e_extra_info = ""
+										
+										
+										-- Add extra info if this is an enum
+										if d_enum then
+											e_extra_info = e_extra_info .. "\n\n---- ENUM INFO ----\n"
+											local found = false
+											local value = buffer(offset, d_length):le_uint()
+											for l, _ in pairs(d_enum) do
+												if l == value then
+													found = true
+													e_extra_info = e_extra_info .. "Name: " .. d_enum[l].name .. "\n"
+													e_extra_info = e_extra_info .. "Value: " .. l .. string.format(" (0x%08x)", l) .. "\n"
+													if d_enum[l].desc then
+														e_extra_info = e_extra_info .. "Description: " .. d_enum[l].desc .. "\n"
+													end
+												end
+											end
+											if not found then
+												e_extra_info = e_extra_info .. "Unknown enum value: " .. value .. string.format(" (0x%08x)", value)
+											end
+											e_extra_info = e_extra_info .. "\n"
+										end
+										subtree:add_tvb_expert_info(rtids[adjusted_rtid]["experts"][struct_name .. "." .. d_id], buffer(offset, d_length), d_name .. ": " .. e_text .. e_extra_info)
+									end
+									
+
+									offset = offset + d_length
+									-- END
+									
 								end
-
-								offset = offset + d_length
-
+								
 								break
 							end
+							
+							test_struct_total_length = test_struct_total_length - length
+							
 						end
-
-						total_struct_length = total_struct_length + struct.length
-
-						if total_struct_length == (length - offset) then
-
-							local d_type = struct.type
-							local d_id = struct.id
-							local d_name = struct.name
-							local d_length = struct.length
-							local d_display = struct.display or base.NONE
-							local d_enum = struct.enum
-							local field = rtids[rtid].fields[struct_name.."."..d_id]
-							local displaytext = nil
-
-							if d_enum ~= nil then
-								for k, _ in pairs(d_enum) do
-									if k == buffer(offset, d_length):le_uint() then
-										local hexlen = tostring(d_length)
-										if d_length <= 9 then
-											hexlen = "0" .. tostring(d_length)
-										end
-										if d_length <= 99 then
-											hexlen = "00" .. tostring(d_length)
-										end
-										if d_length <= 999 then
-											hexlen = "000" .. tostring(d_length)
-										end
-										displaytext = d_enum[k].name .. " (" .. k .. ") (" .. string.format("0x%" .. hexlen .. "x", k) .. ")"
-									end
-								end
-							end
-
-							if displaytext ~= nil then
-								subtree:add(field, buffer(offset, d_length), displaytext)
-							else
-								if d_type == "uint8" or d_type == "uint16" or d_type == "uint32" then
-									subtree:add_le(field, buffer(offset, d_length))
-								else
-									subtree:add(field, buffer(offset, d_length))
-								end
-							end
-
-							offset = offset + d_length
-
+						
+						if found_rt_struct then
 							break
 						end
-
+						
 					end
-
-
-
 				end
 			end
-			--]]
-
-
-			-- Just show raw data
-			subtree:add_le(medius_protocol_msg["data"], buffer(offset, rt_length))
-
-			if rtids[adjusted_rtid] == nil then
-				return
+			
+			if not found_rt_struct then
+				-- Just show raw data
+				subtree:add_le(medius_protocol_msg["data"], buffer(offset, rt_length))
 			end
 
 			-- If this is an "APP" packet ...
@@ -1642,8 +1991,6 @@ local function show_agreement()
 		return
 	end
 
-	local mwd_usage_agree = false
-
 	-- create new text window and initialize its text
 	local win = TextWindow.new("Medius Wireshark Dissector Usage Agreement")
 	win:set_editable(false)
@@ -1743,7 +2090,71 @@ local function check_agreement()
 		return
 	end
 
+	mwd_usage_agree = true
 	init()
 end
+
+---------------------------------------------
+-- GUI Options
+---------------------------------------------
+
+-- Register Toggle Expert Info button
+register_menu("Medius Wireshark Dissector/Toggle Expert Info",
+	(function()
+		if not mwd_usage_agree then
+			os.exit(13)
+		end
+		mwd_settings.enable_expert_info = not mwd_settings.enable_expert_info
+		reload_packets()
+	end),
+MENU_TOOLS_UNSORTED)
+
+-- Register About button
+register_menu("Medius Wireshark Dissector/About",
+	(function()
+		if not mwd_usage_agree then
+			os.exit(13)
+		end
+		local win = TextWindow.new("About - Medius Wireshark Dissector")
+		win:set_editable(false)
+		win:set("Medius Wireshark Dissector\n")
+		win:append(" - Version: " .. plugin_info["version"] .. "\n")
+		win:append(" - Author: " .. plugin_info["author"] .. "\n")
+		win:append(" - Website: " .. plugin_info["repository"] .. "\n")
+		win:append(" - Wireshark Version: " .. get_version() .. "\n")
+		win:append(" - Lua Version: " .. _VERSION .. "\n")
+		win:append(" - Path: " .. get_current_path() .. "\n")
+		win:append(" - Settings: \n")
+		
+		for k, v in pairs(mwd_settings) do
+			win:append("   - " .. k .. ": " .. tostring(v))
+		end
+		
+		win:add_button("Website", function()
+			browser_open_url(plugin_info["repository"])
+		end)
+	end),
+MENU_TOOLS_UNSORTED)
+
+-- Register PS2 Wiki Button
+register_menu("Medius Wireshark Dissector/Wiki/PlayStation 2",
+	(function()
+		if not mwd_usage_agree then
+			os.exit(13)
+		end
+		browser_open_url("https://wiki.hashsploit.net/PlayStation_2")
+	end),
+MENU_TOOLS_UNSORTED)
+
+-- Register PS3 Wiki Button
+register_menu("Medius Wireshark Dissector/Wiki/PlayStation 3",
+	(function()
+		if not mwd_usage_agree then
+			os.exit(13)
+		end
+		browser_open_url("https://wiki.hashsploit.net/PlayStation_3")
+	end),
+MENU_TOOLS_UNSORTED)
+
 
 check_agreement()
